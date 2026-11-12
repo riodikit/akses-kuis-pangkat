@@ -13,6 +13,8 @@ const read = (p) => readFileSync(resolve(root, p), 'utf8');
 // Urutan mengikuti urutan <script> di template: story.js butuh questions.js,
 // game.js butuh semuanya.
 const FILES = {
+  // ASSETS paling awal: gambar harus siap sebelum game.js dipanggil.
+  '/*__ASSETS__*/': 'src/assets.js',
   '/*__QUESTIONS__*/': 'src/questions.js',
   '/*__STORY__*/': 'src/story.js',
   '/*__QUIZ__*/': 'src/quiz.js',

@@ -4,6 +4,44 @@
   var GK = globalThis.GK;
   var DIAG = new URLSearchParams(location.search).has('diag');
 
+  // ── SPRITE ────────────────────────────────────────────────
+  // Gambar ditanam sebagai data URI di src/assets.js (dibuat oleh
+  // tools/build-assets.mjs). Dimuat sekali, lalu dipakai berulang.
+  var IMG = {};
+  var IMG_READY = false;
+  (function loadArt() {
+    var art = GK.ART || {};
+    var keys = Object.keys(art);
+    if (!keys.length) return;
+    var left = keys.length;
+    keys.forEach(function (k) {
+      var im = new Image();
+      im.onload = function () { if (--left === 0) IMG_READY = true; };
+      im.onerror = function () { if (--left === 0) IMG_READY = true; };
+      im.src = art[k];
+      IMG[k] = im;
+    });
+  })();
+
+  // Gambar sprite dengan ukuran tetap dan titik tumpu di bawah-tengah,
+  // supaya sprite selalu "berdiri" di permukaan tanah.
+  function drawSprite(key, cx, bottomY, hgt, flip) {
+    var im = IMG[key];
+    if (!im || !im.complete || !im.width) return false;
+    var ratio = im.width / im.height;
+    var w = hgt * ratio;
+    ctx.save();
+    if (flip) {
+      ctx.translate(cx, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(im, -w / 2, bottomY - hgt, w, hgt);
+    } else {
+      ctx.drawImage(im, cx - w / 2, bottomY - hgt, w, hgt);
+    }
+    ctx.restore();
+    return true;
+  }
+
   // ── elemen ────────────────────────────────────────────────
   var cv = document.getElementById('cv');
   var ctx = cv.getContext('2d');
@@ -737,6 +775,84 @@
     roundRect(x - 9, y - 10, w + 18, 22, 10);
     ctx.fill();
 
+    // ── Gembok di tengah gerbang ──
+    // Pakai sprite pixel asli dari game lama (assets/lock.webp). Kalau gagal
+    // dimuat, digambar gembok vektor sederhana sebagai cadangan.
+    var cx = x + w / 2;
+    var cy = y + h * 0.46;
+    var lockSize = Math.min(w * 0.86, 96);
+    var drawnLock = drawSprite('lock', cx, cy + lockSize / 2, lockSize, false);
+
+    if (!drawnLock) {
+      var lw = w * 0.66, lh = lw * 0.78;
+      ctx.strokeStyle = '#e8edf5';
+      ctx.lineWidth = 11;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx, cy - lh * 0.52, lw * 0.34, Math.PI, 0);
+      ctx.stroke();
+      ctx.fillStyle = '#ffd24a';
+      roundRect(cx - lw / 2, cy - lh * 0.12, lw, lh, 9);
+      ctx.fill();
+      ctx.fillStyle = '#7a4a00';
+      ctx.beginPath();
+      ctx.arc(cx, cy + lh * 0.30, lw * 0.13, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // Gembok digambar sebagai GERBANG TERKUNCI, bukan gembok raksasa.
+  // Alasannya: gembok harus setinggi 340px supaya tidak bisa dilompati
+  // (lihat src/levels.js), dan gembok 340px terlihat aneh. Gerbang setinggi
+  // itu justru wajar — dan memang itu yang menghalangi jalan.
+  function drawLock(l) {
+    var x = l.x, y = l.y, w = l.w, h = l.h;
+
+    if (l.open) {
+      // Gerbang sudah terbuka: palang kiri-kanan menyingkir, jadi pudar.
+      ctx.globalAlpha = 0.32;
+      ctx.fillStyle = '#39d98a';
+      roundRect(x, y + h * 0.30, w, h * 0.70, 10);
+      ctx.fill();
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = '#0b4a2c';
+      ctx.lineWidth = 9;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.28, y + h * 0.58);
+      ctx.lineTo(x + w * 0.45, y + h * 0.74);
+      ctx.lineTo(x + w * 0.74, y + h * 0.40);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    // ── Tiang gerbang (batu) ──
+    ctx.fillStyle = '#8b93a8';
+    roundRect(x - 5, y, w + 10, h, 8);
+    ctx.fill();
+
+    // ── Papan kayu di dalam tiang ──
+    ctx.fillStyle = '#c98a4b';
+    roundRect(x + 4, y + 14, w - 8, h - 14, 6);
+    ctx.fill();
+    // Garis papan
+    ctx.strokeStyle = 'rgba(120,70,25,0.45)';
+    ctx.lineWidth = 2;
+    for (var py = y + 14; py < y + h - 10; py += 34) {
+      ctx.beginPath();
+      ctx.moveTo(x + 6, py);
+      ctx.lineTo(x + w - 6, py);
+      ctx.stroke();
+    }
+    // Bayangan sisi kanan supaya terlihat 3D
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(x + w - 12, y + 14, 8, h - 14);
+
+    // ── Puncak gerbang melengkung ──
+    ctx.fillStyle = '#a8b0c4';
+    roundRect(x - 9, y - 10, w + 18, 22, 10);
+    ctx.fill();
+
     // ── Gembok emas di tengah gerbang ──
     var cx = x + w / 2;
     var cy = y + h * 0.46;
@@ -780,7 +896,12 @@
 
   function drawTrophy(t) {
     var cx = t.x + t.w / 2;
-    // Piala emas
+    // Piala berkilau naik-turun sedikit supaya menarik perhatian.
+    var bob = Math.sin(S.world.t * 2.2) * 4;
+    var drawn = drawSprite('trophy', cx, t.y + t.h + bob, t.h * 1.5, false);
+    if (drawn) return;
+
+    // Cadangan
     ctx.fillStyle = '#ffcf3f';
     ctx.beginPath();
     ctx.moveTo(t.x + 8, t.y + 6);
@@ -789,113 +910,72 @@
     ctx.lineTo(t.x + 14, t.y + t.h * 0.58);
     ctx.closePath();
     ctx.fill();
-
-    // Gagang
-    ctx.strokeStyle = '#ffcf3f';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(t.x + 4, t.y + 20, 12, Math.PI * 0.5, Math.PI * 1.5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(t.x + t.w - 4, t.y + 20, 12, Math.PI * 1.5, Math.PI * 0.5);
-    ctx.stroke();
-
-    // Kaki
-    ctx.fillStyle = '#e0a800';
-    ctx.fillRect(cx - 6, t.y + t.h * 0.58, 12, t.h * 0.22);
-    ctx.fillRect(cx - 20, t.y + t.h * 0.8, 40, 8);
-
-    // Kilau
-    ctx.fillStyle = '#fff8d0';
-    ctx.globalAlpha = 0.7;
-    ctx.beginPath();
-    ctx.ellipse(t.x + 18, t.y + 20, 5, 12, -0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
   }
 
   function drawEnemy(e, t) {
-    // Lalat/kelelawar: badan gelap + mata putih + sayap mengepak.
-    var cx = e.x + e.w / 2, cy = e.y + e.h / 2;
-    var flap = Math.sin(t * 14) * 5;
+    var cx = e.x + e.w / 2;
+    var bottom = e.y + e.h;
+    // Lalat melayang: naik-turun halus supaya terlihat hidup.
+    var bob = Math.sin(t * 4 + e.x * 0.01) * 3;
 
-    // Sayap
+    var drawn = drawSprite('enemy', cx, bottom + bob, e.h * 1.9, false);
+    if (drawn) return;
+
+    // Cadangan: bentuk lama.
     ctx.fillStyle = 'rgba(60,70,110,0.55)';
     ctx.beginPath();
-    ctx.ellipse(cx - e.w * 0.55, cy - 4 + flap, e.w * 0.45, e.h * 0.3, -0.5, 0, Math.PI * 2);
+    ctx.ellipse(cx - e.w * 0.5, e.y + e.h / 2, e.w * 0.4, e.h * 0.28, -0.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(cx + e.w * 0.55, cy - 4 + flap, e.w * 0.45, e.h * 0.3, 0.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Badan
     ctx.fillStyle = '#3d2f6b';
     ctx.beginPath();
-    ctx.arc(cx, cy, e.w * 0.5, 0, Math.PI * 2);
+    ctx.arc(cx, e.y + e.h / 2, e.w * 0.5, 0, Math.PI * 2);
     ctx.fill();
-
-    // Mata
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.arc(cx - 5, cy - 2, 4.5, 0, Math.PI * 2);
-    ctx.arc(cx + 5, cy - 2, 4.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.arc(cx - 5, cy - 2, 2, 0, Math.PI * 2);
-    ctx.arc(cx + 5, cy - 2, 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Taring kecil
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.moveTo(cx - 5, cy + 7);
-    ctx.lineTo(cx - 2, cy + 12);
-    ctx.lineTo(cx + 1, cy + 7);
+    ctx.arc(cx - 4, e.y + e.h / 2 - 2, 4, 0, Math.PI * 2);
     ctx.fill();
   }
 
   function drawPlayer(p, st) {
-    // Kedip saat tidak bisa dilukai (invuln)
+    // Kedip saat kebal setelah kena musuh.
     if (p.invuln > 0 && Math.floor(p.invuln * 12) % 2 === 0) return;
 
     var cx = p.x + p.w / 2;
-    var cy = p.y + p.h / 2;
+    var bottom = p.y + p.h;
 
     // Bayangan
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillStyle = 'rgba(0,0,0,0.20)';
     ctx.beginPath();
-    ctx.ellipse(cx, p.y + p.h + 2, p.w * 0.5, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, bottom + 2, p.w * 0.46, 5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Badan (blob lucu)
-    ctx.fillStyle = '#ff8fab';
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + 3, p.w * 0.52, p.h * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#d95f80';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    // Pilih frame: lompat / jatuh / lari (2 frame bergantian) / diam.
+    var key = 'hero_idle';
+    if (!p.onGround) {
+      key = 'hero_jump';
+    } else if (Math.abs(p.vx) > 20) {
+      // Animasi lari: ganti frame tiap ~0.11 detik.
+      key = (Math.floor(st.t * 9) % 2 === 0) ? 'hero_run1' : 'hero_run2';
+    } else {
+      key = 'hero_idle';
+    }
 
-    // Mata (ikut arah hadap)
-    var ex = p.facing * 3;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(cx - 5 + ex, cy - 2, 5.5, 0, Math.PI * 2);
-    ctx.arc(cx + 5 + ex, cy - 2, 5.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#20143a';
-    ctx.beginPath();
-    ctx.arc(cx - 4 + ex * 1.6, cy - 2, 2.6, 0, Math.PI * 2);
-    ctx.arc(cx + 6 + ex * 1.6, cy - 2, 2.6, 0, Math.PI * 2);
-    ctx.fill();
+    // Sprite digambar lebih tinggi dari kotak tabrakan: kepala karakter
+    // boleh menonjol, yang penting kakinya pas di tanah.
+    var drawn = drawSprite(key, cx, bottom + 3, p.h * 1.75, p.facing < 0);
 
-    // Pipi meruah
-    ctx.fillStyle = 'rgba(255,120,150,0.5)';
-    ctx.beginPath();
-    ctx.arc(cx - 9, cy + 7, 3.5, 0, Math.PI * 2);
-    ctx.arc(cx + 9, cy + 7, 3.5, 0, Math.PI * 2);
-    ctx.fill();
+    if (!drawn) {
+      // Cadangan kalau gambar gagal dimuat: blob lama, jangan sampai hilang.
+      ctx.fillStyle = '#ff8fab';
+      ctx.beginPath();
+      ctx.ellipse(cx, p.y + p.h / 2 + 3, p.w * 0.52, p.h * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#20143a';
+      ctx.beginPath();
+      ctx.arc(cx - 5, p.y + p.h / 2 - 2, 2.6, 0, Math.PI * 2);
+      ctx.arc(cx + 5, p.y + p.h / 2 - 2, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // ══════════════════════════════════════════════════════════

@@ -1,0 +1,2175 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Akses — Aplikasi Kuis Edukasi</title>
+<style>
+/* ── Palet: langit pastel, rumput hijau, kartu krem. Tidak ada warna neon. ── */
+:root{
+  --sky1:#7ec8f5; --sky2:#bfe9ff; --sand:#ffe9b8;
+  --ink:#1b2340; --card:#fffdf5; --grass1:#8ee08a; --grass2:#4fb556;
+  --lock1:#ffd24a; --lock2:#f5a623; --danger:#ff6b6b; --good:#39d98a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:linear-gradient(180deg,var(--sky1),var(--sky2) 55%,var(--sand));
+  user-select:none;-webkit-user-select:none}
+canvas{display:block;width:100%;height:100%;image-rendering:auto}
+
+/* ── Overlay: satu pola untuk semua layar, cuma beda isi. ── */
+.overlay{position:fixed;inset:0;display:none;place-items:center;
+  background:#0b1020aa;padding:16px;z-index:10;overflow-y:auto}
+.overlay.on{display:grid}
+
+/* ── Beranda ── */
+.homeInner{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;
+  background:var(--card);border-radius:28px;padding:clamp(18px,5vw,34px) clamp(20px,6vw,46px);
+  box-shadow:0 14px 0 #0000001a,0 26px 50px #00000033;max-width:min(94vw,520px)}
+.gameTitle{margin:0;font-size:clamp(38px,11vw,80px);letter-spacing:3px;color:var(--ink);
+  text-shadow:0 5px 0 #fff,0 10px 18px #1b234033;line-height:1}
+.gameSub{margin:0;font-size:clamp(11px,3.1vw,15px);font-weight:700;color:#2b3a63;opacity:.85}
+.play{display:flex;align-items:center;gap:12px;padding:16px 44px;border:0;border-radius:999px;
+  background:linear-gradient(180deg,var(--lock1),var(--lock2));color:#4a2c00;
+  font-weight:800;font-size:clamp(20px,5vw,28px);cursor:pointer;
+  box-shadow:0 8px 0 #c47f12,0 16px 24px #00000022;transition:transform .06s}
+.play:active{transform:translateY(5px);box-shadow:0 3px 0 #c47f12}
+.hint{font-size:12px;color:#2b3a63;opacity:.75;font-weight:600;margin:0}
+
+/* ── Kartu level: 3 sejajar, yang terkunci abu-abu + gembok. ── */
+.levels{display:flex;gap:12px}
+.lv{width:clamp(74px,20vw,104px);height:clamp(84px,22vw,116px);
+  border:0;border-radius:18px;cursor:pointer;font-weight:800;font-family:inherit;
+  background:linear-gradient(180deg,var(--grass1),var(--grass2));
+  color:#0f3d16;box-shadow:0 6px 0 #2f7a37,0 10px 16px #0000001f;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  transition:transform .06s}
+.lv:active:not(.locked){transform:translateY(4px);box-shadow:0 2px 0 #2f7a37}
+.lv.locked{background:linear-gradient(180deg,#c9d2e6,#98a4bf);
+  color:#3c4763;box-shadow:0 6px 0 #6c7896;cursor:not-allowed}
+.lv .n{font-size:clamp(20px,5.4vw,26px);line-height:1}
+.lv .s{font-size:10px;opacity:.85;font-weight:700}
+.lv .best{font-size:11px;font-weight:800;color:#0b3d18;background:#ffffffb0;
+  border-radius:999px;padding:1px 8px}
+
+/* ── Kartu kuis ── */
+.qCard{background:var(--card);border-radius:24px;padding:clamp(16px,4.4vw,26px);
+  width:min(94vw,560px);box-shadow:0 14px 0 #0000001a,0 26px 50px #00000033;
+  max-height:92vh;overflow-y:auto}
+.qMeta{display:flex;justify-content:space-between;align-items:center;
+  font-size:12px;font-weight:800;color:#2b3a63;margin-bottom:10px;letter-spacing:.4px}
+.qMeta .badge{background:#eef3ff;border-radius:999px;padding:4px 12px}
+
+/* Soal cerita: kotak narasi biru, terpisah jelas dari pertanyaan. */
+.storyBox{background:#e8f4ff;border-left:6px solid #4a9fe0;border-radius:12px;
+  padding:12px 14px;margin:0 0 14px;font-size:clamp(14px,3.8vw,17px);
+  font-weight:600;color:#123;line-height:1.55;text-align:left}
+.storyBox sup{font-size:.62em;vertical-align:super}
+
+/* Soal pakai <sup>; ukurannya harus ikut mengecil otomatis. */
+.prompt{font-size:clamp(21px,5.6vw,32px);font-weight:800;color:var(--ink);
+  text-align:center;margin:0 0 16px;line-height:1.35}
+.prompt sup{font-size:.62em;vertical-align:super}
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{display:block;width:100%;padding:14px;font-size:clamp(17px,4.4vw,23px);
+  font-weight:800;font-family:inherit;border-radius:14px;border:3px solid #cfd6ee;
+  background:#f4f7ff;color:var(--ink);cursor:pointer;transition:transform .06s;
+  line-height:1.3}
+.opt sup{font-size:.62em;vertical-align:super}
+.opt:active:not(:disabled){transform:scale(.98)}
+.opt:disabled{cursor:default}
+.opt.right{background:var(--good);border-color:#1f9d63;color:#04301c}
+.opt.wrong{background:var(--danger);border-color:#c62828;color:#3b0000}
+.opt.dim{opacity:.5}
+.feed{margin-top:12px;font-size:clamp(12px,3.3vw,14px);font-weight:700;
+  color:#24406b;line-height:1.55;background:#f4f7ff;border-radius:10px;
+  padding:10px 12px;display:none}
+.feed.show{display:block}
+.feed sup{font-size:.68em;vertical-align:super}
+.feed.ok{background:#e4fbef;color:#0b4a2c}
+.feed.no{background:#ffeaea;color:#6b1414}
+
+/* ── Hasil ── */
+.rCard{background:var(--card);border-radius:24px;padding:clamp(18px,4.6vw,28px);
+  width:min(94vw,560px);box-shadow:0 14px 0 #0000001a,0 26px 50px #00000033;
+  max-height:92vh;overflow-y:auto;text-align:center}
+.rTitle{margin:0 0 4px;font-size:clamp(20px,5.4vw,28px);color:var(--ink);font-weight:800}
+.scoreBig{font-size:clamp(48px,15vw,76px);font-weight:900;color:var(--ink);line-height:1;
+  margin:6px 0 2px}
+.scoreBig.pass{color:#1f9d63}
+.scoreBig.fail{color:#d24a4a}
+.scoreLine{font-size:clamp(13px,3.6vw,16px);font-weight:800;color:#2b3a63;margin-bottom:14px}
+.rListHead{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:11px;font-weight:800;letter-spacing:.5px;color:#5a6a8f;
+  text-transform:uppercase;margin:0 0 4px;padding-top:10px}
+.rListHead #rHint{font-weight:700;text-transform:none;letter-spacing:0;opacity:.7}
+.rList{text-align:left;max-height:32vh;overflow-y:auto;margin:0 0 12px;
+  -webkit-overflow-scrolling:touch;
+  border-top:2px dashed #e2e8f5;padding-top:10px}
+.rRow{display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12.5px;
+  border-bottom:1px solid #eef2fa}
+.rRow .mk{flex:0 0 20px;font-weight:900;font-size:15px;line-height:1.3}
+.rRow .mk.ok{color:#1f9d63}
+.rRow .mk.no{color:#d24a4a}
+.rRow .tx{flex:1;color:#22304f;font-weight:600;line-height:1.4}
+.rRow .tx sup{font-size:.68em;vertical-align:super}
+.rRow .ans{display:block;margin-top:3px;font-size:11.5px;font-weight:700}
+.rRow .ans .picked{color:#c62828}
+.rRow .ans .should{color:#1f9d63}
+.need{background:#ffeaea;color:#7a1414;border-radius:12px;padding:10px 14px;
+  font-size:13px;font-weight:800;margin-bottom:12px}
+.rowBtns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.btn2{border:0;border-radius:14px;padding:12px 24px;font-weight:800;font-size:15px;
+  font-family:inherit;cursor:pointer;background:linear-gradient(180deg,var(--grass1),var(--grass2));
+  color:#0f3d16;box-shadow:0 5px 0 #2f7a37}
+.btn2:active{transform:translateY(3px);box-shadow:0 2px 0 #2f7a37}
+.btn2.ghost{background:#eef2fa;color:#2b3a63;box-shadow:0 5px 0 #c9d2e6}
+
+/* ── HUD ── */
+.hud{position:fixed;top:0;left:0;right:0;display:none;justify-content:space-between;
+  align-items:center;padding:10px 14px;z-index:6;pointer-events:none;
+  font-weight:900;color:#fff;text-shadow:0 2px 0 #00000055}
+.hud.on{display:flex}
+.hud .hearts{font-size:clamp(16px,4.4vw,22px);letter-spacing:2px;
+  background:#0b1020aa;border-radius:999px;padding:4px 12px;
+  text-shadow:0 1px 2px #00000066}
+.hud .score{font-size:clamp(13px,3.6vw,17px);background:#0b1020aa;border-radius:999px;
+  padding:5px 14px}
+
+/* ── Kontrol sentuh ── */
+.pad{position:fixed;bottom:14px;left:0;right:0;display:none;
+  justify-content:space-between;padding:0 16px;z-index:7;pointer-events:none}
+.pad.on{display:flex}
+.cluster{display:flex;gap:10px;pointer-events:auto;align-items:flex-end}
+.btn{width:clamp(48px,13vw,62px);height:clamp(48px,13vw,62px);border-radius:50%;
+  border:0;background:#ffffffd9;color:var(--ink);font-size:20px;font-weight:800;
+  display:grid;place-items:center;box-shadow:0 4px 0 #00000022;
+  touch-action:none;cursor:pointer;font-family:inherit}
+.btn:active{transform:translateY(3px);box-shadow:none}
+.btn.jump{width:clamp(64px,17vw,84px);height:clamp(64px,17vw,84px);font-size:15px;
+  background:linear-gradient(180deg,var(--grass1),var(--grass2));color:#fff;
+  text-shadow:0 2px 0 #00000033}
+
+/* ── Layar sempit: kecilkan padding biar tidak sesak ── */
+@media (max-height:520px){
+  .homeInner{gap:8px;padding:12px 20px}
+  .gameTitle{font-size:clamp(28px,7vw,44px)}
+  .play{padding:10px 30px;font-size:18px}
+}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<!-- ── BERANDA ── -->
+<div id="home" class="overlay on">
+  <div class="homeInner">
+    <h1 class="gameTitle">AKSES</h1>
+    <p class="gameSub">Aplikasi Kuis Edukasi · Bilangan Berpangkat Kelas 8</p>
+    <button id="btnPlay" class="play">▶ PLAY</button>
+    <div id="levelCards" class="levels"></div>
+    <p class="hint">Selesaikan level (minimal 60) untuk membuka level berikutnya</p>
+  </div>
+</div>
+
+<!-- ── KUIS ── -->
+<div id="quiz" class="overlay">
+  <div class="qCard">
+    <div class="qMeta">
+      <span class="badge" id="qNum">Soal 1 / 10</span>
+      <span class="badge" id="qScore">Skor 0</span>
+    </div>
+    <div id="qStory"></div>
+    <div class="prompt" id="qPrompt">…</div>
+    <div class="opts" id="qOpts"></div>
+    <div class="feed" id="qFeed"></div>
+  </div>
+</div>
+
+<!-- ── HASIL ── -->
+<div id="result" class="overlay">
+  <div class="rCard">
+    <h2 class="rTitle" id="rTitle">Level selesai</h2>
+    <div class="scoreBig" id="rScore">0</div>
+    <div class="scoreLine" id="rLine">Benar 0 · Salah 0</div>
+    <div id="rNeed"></div>
+    <div class="rListHead">Rincian jawaban <span id="rHint">(geser)</span></div>
+    <div class="rList" id="rList"></div>
+    <div class="rowBtns">
+      <button id="btnRetry" class="btn2">MAIN LAGI</button>
+      <button id="btnMenu" class="btn2 ghost">MENU</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── GAME OVER ── -->
+<div id="gameover" class="overlay">
+  <div class="rCard">
+    <h2 class="rTitle">Nyawa habis!</h2>
+    <p class="scoreLine">Kamu tertabrak musuh 3 kali. Coba lagi ya.</p>
+    <div class="rowBtns">
+      <button id="btnRetry2" class="btn2">COBA LAGI</button>
+      <button id="btnMenu2" class="btn2 ghost">MENU</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── HUD ── -->
+<div class="hud" id="hud">
+  <div class="hearts" id="hudLives">❤❤❤</div>
+  <div class="score" id="hudScore">Level 1 · Skor 0</div>
+</div>
+
+<!-- ── KONTROL SENTUH ── -->
+<div class="pad" id="pad">
+  <div class="cluster">
+    <button class="btn" data-k="left">◀</button>
+    <button class="btn" data-k="right">▶</button>
+    <button class="btn" data-k="up">▲</button>
+    <button class="btn" data-k="down">▼</button>
+  </div>
+  <div class="cluster">
+    <button class="btn jump" data-k="jump">JUMP</button>
+  </div>
+</div>
+
+<script>(function (G) {
+  'use strict';
+
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), 1 | t);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const ri = (r, lo, hi) => lo + Math.floor(r() * (hi - lo + 1));
+  const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+  const sup = (n) => '<sup>' + n + '</sup>';
+  const BASE = [2, 3, 4, 5];
+
+  // Distraktor dibuat dari KESALAHAN KHAS SISWA, bukan angka acak.
+  // Acak murni menghasilkan opsi yang gampang ditebak dan tidak mendidik.
+
+  function mul(r, tier) {
+    const a = pick(r, BASE), m = ri(r, 2, 2 + tier), n = ri(r, 2, 2 + tier);
+    const right = m + n;
+    let wrong = m * n;
+    if (wrong === right) wrong = right + 1;
+    return {
+      kind: 'mul', tier,
+      prompt: a + sup(m) + ' &times; ' + a + sup(n) + ' = &hellip;',
+      right: a + sup(right), wrong: a + sup(wrong),
+      explain: 'Basis sama dikali &rarr; pangkat DIJUMLAHKAN: ' + m + ' + ' + n + ' = ' + right + '.'
+    };
+  }
+
+  function div(r, tier) {
+    const a = pick(r, BASE), n = ri(r, 2, 2 + tier), m = n + ri(r, 1, 2 + tier);
+    const right = m - n;
+    return {
+      kind: 'div', tier,
+      prompt: a + sup(m) + ' &divide; ' + a + sup(n) + ' = &hellip;',
+      right: a + sup(right), wrong: a + sup(m + n),
+      explain: 'Basis sama dibagi &rarr; pangkat DIKURANGKAN: ' + m + ' &minus; ' + n + ' = ' + right + '.'
+    };
+  }
+
+  function zero(r, tier) {
+    const a = ri(r, 2, 9);
+    return {
+      kind: 'zero', tier,
+      prompt: a + sup(0) + ' = &hellip;',
+      right: '1', wrong: String(pick(r, [0, a])),
+      explain: 'Setiap bilangan (kecuali 0) berpangkat 0 hasilnya 1.'
+    };
+  }
+
+  function neg(r, tier) {
+    const a = pick(r, [2, 3, 4]), n = ri(r, 1, 1 + tier);
+    return {
+      kind: 'neg', tier,
+      prompt: a + sup('-' + n) + ' = &hellip;',
+      right: '1/' + a + sup(n), wrong: '-' + a + sup(n),
+      explain: 'Pangkat negatif = kebalikannya: ' + a + sup('-' + n) + ' = 1/' + a + sup(n) + '.'
+    };
+  }
+
+  function pow(r, tier) {
+    const a = pick(r, [2, 3]), m = ri(r, 2, 2 + Math.min(tier, 3)), n = ri(r, 2, 2 + Math.min(tier, 2));
+    const right = m * n;
+    let wrong = m + n;
+    if (wrong === right) wrong = right + 2;
+    return {
+      kind: 'pow', tier,
+      prompt: '(' + a + sup(m) + ')' + sup(n) + ' = &hellip;',
+      right: a + sup(right), wrong: a + sup(wrong),
+      explain: 'Pangkat dari pangkat &rarr; pangkat DIKALIKAN: ' + m + ' &times; ' + n + ' = ' + right + '.'
+    };
+  }
+
+  function mix(r, tier) {
+    const a = pick(r, [2, 3]), m = ri(r, 3, 4 + tier), n = ri(r, 2, 3), k = ri(r, 1, 2);
+    const right = m + n - k;
+    return {
+      kind: 'mix', tier,
+      prompt: a + sup(m) + ' &times; ' + a + sup(n) + ' &divide; ' + a + sup(k) + ' = &hellip;',
+      right: a + sup(right), wrong: a + sup(m + n + k),
+      explain: 'Jumlahkan pangkat yang dikali (' + (m + n) + '), lalu kurangi: ' + (m + n) + ' &minus; ' + k + ' = ' + right + '.'
+    };
+  }
+
+  const BUILDERS = { mul, div, zero, neg, pow, mix };
+
+  // ── Resep per level. Awalan "story:" = soal cerita (dibangun src/story.js).
+  // SETIAP level punya TEPAT 3 soal cerita, disebar (tidak menumpuk di awal)
+  // supaya anak tidak bosan dan tidak kaget di soal pertama.
+  //   L1: bentuk pangkat dasar     -> cerita di soal 2, 5, 8
+  //   L2: + pangkat nol & negatif  -> cerita di soal 3, 6, 9
+  //   L3: pangkat-dari-pangkat     -> cerita di soal 2, 5, 9
+  const RECIPE = {
+    1: ['mul', 'story:mul', 'div', 'mul', 'story:div', 'div', 'mul', 'story:mul', 'div', 'mul'],
+    2: ['mul', 'zero', 'story:zero', 'div', 'neg', 'story:neg', 'pow', 'zero', 'story:mul', 'pow'],
+    3: ['pow', 'story:pow', 'mix', 'neg', 'story:mix', 'pow', 'mix', 'neg', 'story:pow', 'mix']
+  };
+
+  // Soal cerita dibangun Story (file terpisah) kalau ada; kalau tidak ada,
+  // jatuh kembali ke bentuk pangkat biasa supaya generator tidak pernah crash
+  // (mis. kalau urutan <script> di build salah).
+  function build(kind, r, tier) {
+    if (kind.indexOf('story:') === 0) {
+      const base = kind.slice(6);
+      const S = G.Story && G.Story.STORY;
+      if (S && S[base]) {
+        const q = S[base](r, tier);
+        return {
+          kind: base, tier, isStory: true,
+          story: q.story, prompt: q.prompt,
+          right: q.right, wrong: q.wrong, explain: q.explain
+        };
+      }
+      return Object.assign({ isStory: false }, BUILDERS[base](r, tier));
+    }
+    return Object.assign({ isStory: false }, BUILDERS[kind](r, tier));
+  }
+
+  function generateLevel(level, seed) {
+    const recipe = RECIPE[level];
+    if (!recipe) throw new Error('level tidak dikenal: ' + level);
+    const r = mulberry32(seed + level * 7919);
+    const out = [];
+    const seen = new Set();
+    let guard = 0;
+    for (let i = 0; i < recipe.length; i++) {
+      const tier = 1 + Math.floor((i * 4) / recipe.length);
+      let q;
+      do {
+        q = build(recipe[i], r, tier);
+        guard++;
+      } while (seen.has((q.story || '') + '|' + q.prompt) && guard < 400);
+      seen.add((q.story || '') + '|' + q.prompt);
+      // Posisi jawaban benar diacak supaya tidak selalu opsi pertama.
+      const flip = r() < 0.5;
+      out.push({
+        id: level + '-' + i,
+        kind: q.kind,
+        tier: q.tier,
+        isStory: q.isStory,
+        story: q.story || '',
+        prompt: q.prompt,
+        options: flip ? [q.wrong, q.right] : [q.right, q.wrong],
+        correct: flip ? 1 : 0,
+        explain: q.explain
+      });
+    }
+    return out;
+  }
+
+  G.Questions = { generateLevel, mulberry32, RECIPE };
+})(globalThis.GK = globalThis.GK || {});
+</script>
+<script>(function (G) {
+  'use strict';
+
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), 1 | t);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const ri = (r, lo, hi) => lo + Math.floor(r() * (hi - lo + 1));
+  const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+  const sup = (n) => '<sup>' + n + '</sup>';
+
+  // ── Tokoh cerita. Konteks nyata (bukan abstrak) supaya anak membayangkan.
+  const NAMA = ['Rina', 'Bagus', 'Sari', 'Dimas', 'Ayu', 'Fajar', 'Nadia', 'Yoga'];
+  // Tempat dipilih PER JENIS SOAL supaya tidak janggal
+  // ("bakteri di perpustakaan" itu salah, "bakteri di laboratorium" benar).
+  const TEMPAT_BENDA = [
+    'perpustakaan', 'kantin sekolah', 'toko buku', 'gudang olahraga',
+    'ruang kelas', 'warung dekat sekolah', 'aula'
+  ];
+  const TEMPAT_SAINS = ['laboratorium', 'ruang UKS', 'kelas biologi'];
+  const TEMPAT_SALIN = ['ruang guru', 'percetakan sekolah', 'ruang komputer'];
+  const BENDA = [
+    ['kotak pensil', 'pensil'],
+    ['rak', 'buku'],
+    ['kardus', 'bola'],
+    ['toples', 'kelereng'],
+    ['keranjang', 'apel']
+  ];
+
+  // ── Setiap builder mengembalikan {story, prompt, right, wrong, explain}
+  //    dan WAJIB memakai bentuk pangkat yang sama seperti soal biasa,
+  //    supaya jawabannya bisa dihitung ulang dan diverifikasi test.
+
+  // Level 1: perkalian pangkat. "a^n wadah, tiap wadah a^m isi."
+  function storyMul(r, tier) {
+    const nama = pick(r, NAMA), tempat = pick(r, TEMPAT_BENDA);
+    const benda = pick(r, BENDA);
+    const a = pick(r, [2, 3, 4, 5]);
+    const m = ri(r, 2, 2 + tier), n = ri(r, 2, 2 + tier);
+    const right = m + n;
+    let wrong = m * n;
+    if (wrong === right) wrong = right + 1;
+    return {
+      story: nama + ' di ' + tempat + ' menemukan ' + a + sup(n) + ' ' + benda[0] +
+             '. Setiap ' + benda[0] + ' berisi ' + a + sup(m) + ' ' + benda[1] + '.',
+      prompt: 'Berapa jumlah ' + benda[1] + ' seluruhnya?',
+      right: a + sup(right), wrong: a + sup(wrong),
+      explain: 'Jumlah ' + benda[0] + ' &times; isi tiap ' + benda[0] + ' = ' + a + sup(m) +
+               ' &times; ' + a + sup(n) + '. Basis sama dikali &rarr; pangkat DIJUMLAHKAN: ' +
+               m + ' + ' + n + ' = ' + right + ', jadi ' + a + sup(right) + '.'
+    };
+  }
+
+  // Level 1: pembagian pangkat.
+  function storyDiv(r, tier) {
+    const nama = pick(r, NAMA), tempat = pick(r, TEMPAT_BENDA);
+    const benda = pick(r, BENDA);
+    const a = pick(r, [2, 3, 4, 5]);
+    const n = ri(r, 2, 2 + tier), m = n + ri(r, 1, 2 + tier);
+    const right = m - n;
+    return {
+      story: nama + ' membawa ' + a + sup(m) + ' ' + benda[1] + ' ke ' + tempat +
+             '. Semua dibagi rata kepada ' + a + sup(n) + ' anak.',
+      prompt: 'Berapa ' + benda[1] + ' yang diterima setiap anak?',
+      right: a + sup(right), wrong: a + sup(m + n),
+      explain: a + sup(m) + ' &divide; ' + a + sup(n) + '. Basis sama dibagi &rarr; pangkat ' +
+               'DIKURANGKAN: ' + m + ' &minus; ' + n + ' = ' + right + ', jadi ' + a + sup(right) + '.'
+    };
+  }
+
+  // Level 2: pangkat negatif, konteks ukuran (harus di lab/UKS, bukan perpustakaan).
+  function storyNeg(r, tier) {
+    const nama = pick(r, NAMA), tempat = pick(r, TEMPAT_SAINS);
+    const a = pick(r, [2, 3, 4]);
+    const n = ri(r, 1, 1 + tier);
+    return {
+      story: nama + ' mengukur satu bakteri di ' + tempat + '. Panjangnya ' + a + sup('-' + n) + ' milimeter.',
+      prompt: 'Bentuk pecahan dari ' + a + sup('-' + n) + ' adalah &hellip;',
+      right: '1/' + a + sup(n), wrong: '-' + a + sup(n),
+      explain: 'Pangkat negatif berarti kebalikan: ' + a + sup('-' + n) + ' = 1/' + a + sup(n) +
+               '. Jadi ukurannya 1/' + a + sup(n) + ' mm, bukan bilangan negatif.'
+    };
+  }
+
+  // Level 2: pangkat nol.
+  // Metafora lipat kertas: 0 lipatan = 1 lembar utuh. Ini satu-satunya
+  // konteks nyata di mana a^0 = 1 bisa DITURUNKAN dari cerita, bukan dihafal.
+  // Versi lama ("a^0 toples berisi kelereng, berapa isi satu toples?") tidak
+  // koheren — jawaban 1 tidak bisa disimpulkan dari kalimat itu.
+  function storyZero(r, tier) {
+    const nama = pick(r, NAMA);
+    const a = ri(r, 2, 9);
+    // Distraktor: a (lupa bahwa pangkat 0 = 1). JANGAN pakai 0 — terlalu
+    // gampang ditebak dan tidak mencerminkan kesalahan siswa.
+    let wrong = a;
+    if (wrong === 1) wrong = a + 1;
+    return {
+      story: nama + ' melipat kertas. Tiap 1 kali lipat, jumlah bagian dikali ' + a + ': ' +
+             a + sup(1) + ', ' + a + sup(2) + ', dan seterusnya. Kertas yang TIDAK dilipat ' +
+             'sama sekali = ' + a + sup(0) + ' bagian.',
+      prompt: 'Jadi ' + a + sup(0) + ' = &hellip;',
+      right: '1', wrong: String(wrong),
+      explain: 'Kertas yang tidak dilipat tetap 1 lembar utuh. Pola pangkat turun ' +
+               a + sup(2) + ' &rarr; ' + a + sup(1) + ' &rarr; ' + a + sup(0) + ' dibagi ' + a +
+               ' tiap langkah, jadi ' + a + sup(0) + ' = 1, bukan ' + a + '.'
+    };
+  }
+
+  // Level 3: pangkat dari pangkat, konteks penyalinan berulang.
+  function storyPow(r, tier) {
+    const nama = pick(r, NAMA), tempat = pick(r, TEMPAT_SALIN);
+    const a = pick(r, [2, 3]), m = ri(r, 2, 2 + Math.min(tier, 3)), n = ri(r, 2, 2 + Math.min(tier, 2));
+    const right = m * n;
+    let wrong = m + n;
+    if (wrong === right) wrong = right + 2;
+    return {
+      story: nama + ' membuat ' + a + sup(m) + ' lembar salinan di ' + tempat + '. Setiap lembar ' +
+             'disalin lagi menjadi ' + a + sup(n) + ' bagian. Seluruh salinan dikumpulkan.',
+      prompt: 'Banyak salinan seluruhnya = (' + a + sup(m) + ')' + sup(n) + ' = &hellip;',
+      right: a + sup(right), wrong: a + sup(wrong),
+      explain: 'Pangkat dari pangkat &rarr; pangkat DIKALIKAN: ' + m + ' &times; ' + n + ' = ' +
+               right + ', jadi ' + a + sup(right) + '.'
+    };
+  }
+
+  // Level 3: campuran tambah-bagi dalam konteks produksi.
+  function storyMix(r, tier) {
+    const nama = pick(r, NAMA), tempat = pick(r, TEMPAT_BENDA);
+    const benda = pick(r, BENDA);
+    const a = pick(r, [2, 3]), m = ri(r, 3, 4 + tier), n = ri(r, 2, 3), k = ri(r, 1, 2);
+    const right = m + n - k;
+    return {
+      story: nama + ' menyiapkan ' + a + sup(m) + ' ' + benda[1] + ' di ' + tempat +
+             ', lalu menambah ' + a + sup(n) + ' ' + benda[1] + ' lagi. Semuanya dibagi rata ' +
+             'ke dalam ' + a + sup(k) + ' kardus.',
+      prompt: 'Berapa ' + benda[1] + ' isi tiap kardus?',
+      right: a + sup(right), wrong: a + sup(m + n + k),
+      explain: 'Jumlahkan dulu yang ditambah: ' + m + ' + ' + n + ' = ' + (m + n) +
+               ', lalu kurangi pembagi: ' + (m + n) + ' &minus; ' + k + ' = ' + right +
+               ', jadi ' + a + sup(right) + ' per kardus.'
+    };
+  }
+
+  const STORY = {
+    mul: storyMul, div: storyDiv, neg: storyNeg, zero: storyZero,
+    pow: storyPow, mix: storyMix
+  };
+
+  G.Story = { STORY, NAMA, TEMPAT_BENDA, TEMPAT_SAINS, TEMPAT_SALIN };
+})(globalThis.GK = globalThis.GK || {});
+</script>
+<script>(function (G) {
+  'use strict';
+
+  const PER_QUESTION = 10;
+  const MAX_LIVES = 3;
+
+  function create(levelId, questions) {
+    return {
+      levelId: levelId,
+      questions: questions,
+      index: 0,
+      answers: [],
+      open: false,     // soal sedang tampil di layar?
+      locked: false,   // sudah dijawab, menunggu tombol "Lanjut"?
+      done: false,     // semua soal sudah dijawab?
+      lastCorrect: null
+    };
+  }
+
+  function current(s) {
+    return s.questions[s.index] || null;
+  }
+
+  function isCorrect(s, choice) {
+    const q = current(s);
+    return !!q && q.correct === choice;
+  }
+
+  function answer(s, choice) {
+    if (!s.open || s.done) return s;
+    const q = current(s);
+    const ok = q.correct === choice;
+    s.answers.push({
+      id: q.id, choice: choice, correct: ok, prompt: q.prompt, explain: q.explain,
+      // Teks jawaban disimpan supaya layar hasil bisa menampilkan
+      // "kamu pilih 2⁶ · yang benar 2⁵" — bukan cuma ✓/✗ tanpa penjelasan.
+      choiceText: q.options[choice],
+      correctText: q.options[q.correct]
+    });
+    s.lastCorrect = ok;
+    s.open = false;
+    s.locked = true;
+    s.index += 1;
+    if (s.index >= s.questions.length) s.done = true;
+    return s;
+  }
+
+  function next(s) {
+    if (!s.locked) return s;
+    s.locked = false;
+    s.lastCorrect = null;
+    if (!s.done) s.open = true;
+    return s;
+  }
+
+  function score(s) {
+    return s.answers.filter(function (a) { return a.correct; }).length * PER_QUESTION;
+  }
+
+  function correctCount(s) {
+    return s.answers.filter(function (a) { return a.correct; }).length;
+  }
+
+  function wrongCount(s) {
+    return s.answers.filter(function (a) { return !a.correct; }).length;
+  }
+
+  function summary(s) {
+    return {
+      levelId: s.levelId,
+      score: score(s),
+      max: s.questions.length * PER_QUESTION,
+      correct: correctCount(s),
+      wrong: wrongCount(s),
+      answers: s.answers.slice()
+    };
+  }
+
+  G.Quiz = {
+    create, current, answer, next, isCorrect, score, correctCount, wrongCount, summary,
+    PER_QUESTION, MAX_LIVES
+  };
+})(globalThis.GK = globalThis.GK || {});
+</script>
+<script>(function (G) {
+  'use strict';
+
+  const GRAVITY = 1500;
+  const MAX_FALL = 1000;
+  const MOVE_SPEED = 280;
+  const JUMP_V = -780;
+  const COYOTE = 0.10;
+  const BUFFER = 0.12;
+  const DROP_TIME = 0.18;
+  const INVULN = 1.4;
+
+  // Tinggi lompat maks = v^2 / (2g). Level WAJIB didesain di bawah angka ini.
+  // Nilai di bawah: ~202px ke atas, ~291px ke samping.
+  const MAX_JUMP_H = (JUMP_V * JUMP_V) / (2 * GRAVITY);
+  const AIRTIME = (2 * Math.abs(JUMP_V)) / GRAVITY;
+  const MAX_JUMP_W = MOVE_SPEED * AIRTIME;
+
+  function overlaps(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function makeState(level) {
+    return {
+      t: 0,
+      lives: 3,
+      won: false,
+      gameover: false,
+      pendingLock: -1,
+      hitFlash: 0,
+      checkpoint: { x: level.spawn.x, y: level.spawn.y },
+      player: {
+        x: level.spawn.x, y: level.spawn.y, w: 52, h: 68,
+        vx: 0, vy: 0, onGround: false, facing: 1,
+        coyote: 0, buffer: 0, drop: 0, invuln: 0
+      },
+      locks: level.locks.map(function (l) {
+        return { x: l.x, y: l.y, w: l.w, h: l.h, open: false };
+      }),
+      enemies: level.enemies.map(function (e) {
+        return { x: e.x, y: e.y, w: e.w, h: e.h, minX: e.minX, maxX: e.maxX, dir: 1, alive: true };
+      }),
+      trophy: { x: level.trophy.x, y: level.trophy.y, w: level.trophy.w, h: level.trophy.h }
+    };
+  }
+
+  function respawn(st) {
+    const p = st.player;
+    p.x = st.checkpoint.x;
+    p.y = st.checkpoint.y;
+    p.vx = 0;
+    p.vy = 0;
+    p.invuln = INVULN;
+    p.onGround = false;
+  }
+
+  function setCheckpoint(st, x, y) {
+    st.checkpoint = { x: x, y: y };
+  }
+
+  function loseLife(st) {
+    st.lives -= 1;
+    st.hitFlash = 0.25;
+    if (st.lives <= 0) {
+      st.lives = 0;
+      st.gameover = true;
+      return;
+    }
+    respawn(st);
+  }
+
+  function step(st, input, level, dt) {
+    // Selama soal terbuka atau level selesai, dunia benar-benar berhenti.
+    if (st.pendingLock >= 0 || st.won || st.gameover) return st;
+    st.t += dt;
+    const p = st.player;
+    const plats = level.platforms;
+
+    const ax = input.x || 0;
+    if (Math.abs(ax) < 0.22) {
+      p.vx = 0;
+    } else {
+      p.vx = ax * MOVE_SPEED;
+      p.facing = ax > 0 ? 1 : -1;
+    }
+
+    // Jump buffer + coyote time: dua trik kecil yang membuat kontrol terasa enak
+    // dan tidak "bandel" saat dimainkan di HP.
+    if (input.jump) p.buffer = BUFFER;
+    else p.buffer = Math.max(0, p.buffer - dt);
+
+    p.coyote = p.onGround ? COYOTE : Math.max(0, p.coyote - dt);
+    p.drop = Math.max(0, p.drop - dt);
+    p.invuln = Math.max(0, p.invuln - dt);
+    st.hitFlash = Math.max(0, st.hitFlash - dt);
+
+    if (p.buffer > 0 && p.coyote > 0) {
+      p.vy = JUMP_V;
+      p.buffer = 0;
+      p.coyote = 0;
+      p.onGround = false;
+    }
+
+    // ▼ = turun menembus platform satu arah
+    if (input.down && p.onGround) {
+      p.drop = DROP_TIME;
+      p.y += 2;
+      p.onGround = false;
+    }
+
+    p.vy = Math.min(p.vy + GRAVITY * dt, MAX_FALL);
+
+    // Sumbu X dulu, lalu Y. Urutan ini mencegah pemain "nyangkut" di sudut.
+    p.x += p.vx * dt;
+    for (let i = 0; i < plats.length; i++) {
+      const pl = plats[i];
+      if (!pl.solid) continue;
+      if (!overlaps(p, pl)) continue;
+      if (p.vx > 0) p.x = pl.x - p.w;
+      else if (p.vx < 0) p.x = pl.x + pl.w;
+    }
+    if (p.x < 0) p.x = 0;
+    if (p.x + p.w > level.width) p.x = level.width - p.w;
+
+    const prevBottom = p.y + p.h;
+    p.y += p.vy * dt;
+    p.onGround = false;
+    for (let i = 0; i < plats.length; i++) {
+      const pl = plats[i];
+      if (!overlaps(p, pl)) continue;
+      if (pl.solid) {
+        if (p.vy > 0) {
+          p.y = pl.y - p.h;
+          p.vy = 0;
+          p.onGround = true;
+        } else if (p.vy < 0) {
+          p.y = pl.y + pl.h;
+          p.vy = 0;
+        }
+      } else if (p.vy > 0 && prevBottom <= pl.y + 1 && p.drop <= 0) {
+        // Platform satu arah: hanya menahan kalau pemain datang dari atas.
+        p.y = pl.y - p.h;
+        p.vy = 0;
+        p.onGround = true;
+      }
+    }
+
+    for (let i = 0; i < st.enemies.length; i++) {
+      const e = st.enemies[i];
+      if (!e.alive) continue;
+      e.x += e.dir * 70 * dt;
+      if (e.x <= e.minX) { e.x = e.minX; e.dir = 1; }
+      if (e.x + e.w >= e.maxX) { e.x = e.maxX - e.w; e.dir = -1; }
+      if (p.invuln <= 0 && overlaps(p, e)) loseLife(st);
+    }
+
+    if (p.y > level.height + 160) loseLife(st);
+
+    for (let i = 0; i < st.locks.length; i++) {
+      const l = st.locks[i];
+      if (l.open) continue;
+      if (overlaps(p, l)) {
+        st.pendingLock = i;
+        p.vx = 0;
+        break;
+      }
+    }
+
+    if (overlaps(p, st.trophy)) st.won = true;
+    return st;
+  }
+
+  G.Physics = {
+    makeState, step, respawn, loseLife, setCheckpoint, overlaps,
+    MOVE_SPEED, JUMP_V, GRAVITY, MAX_JUMP_H, MAX_JUMP_W
+  };
+})(globalThis.GK = globalThis.GK || {});
+</script>
+<script>(function (G) {
+  'use strict';
+
+  // ══════════════════════════════════════════════════════════════════
+  //  ATURAN DESAIN — dijaga oleh tests/levels.test.js + tests/traversal.test.js
+  //
+  //  1. Semua 10 gembok berdiri di ATAS TANAH, berjarak tetap di jalur utama.
+  //     Pemain yang jalan ke kanan PASTI melewati kesepuluhnya -> skor 100 mungkin.
+  //
+  //  2. Gembok TINGGI (340px). Tinggi lompat maks pemain ~203px, jadi secara
+  //     teori 205px sudah cukup. TAPI pemain bisa mendarat DI ATAS gembok
+  //     lalu melompat lagi, sehingga 205px masih bisa dilewati (terbukti:
+  //     hanya 7/10 gembok tersentuh). 340px menutup jalur itu sepenuhnya.
+  //
+  //  3. Platform dan musuh menempati CELAH YANG BERBEDA. Ini yang membuat level
+  //     selalu bisa diselesaikan: kalau musuh berdiri di bawah platform, pemain
+  //     yang melompat menghindari musuh akan menabrak platform lalu jatuh tepat
+  //     ke musuh -> pendaratan mematikan, level mustahil.
+  //
+  //  4. Jumlah musuh NAIK antar level (4 -> 6 -> 7).
+  // ══════════════════════════════════════════════════════════════════
+
+  const W = 2800;
+  const H = 900;
+  const GROUND = H - 160;  // = 740, pita tanah 160px (tebal, bukan garis tipis)
+  const LOCK_GAP = 210;
+  const LOCK_W = 78;
+  const LOCK_H = 340;          // lihat aturan 2
+  const ENEMY = 44;
+  const PAD = 24;
+
+  // groundY WAJIB diberikan: level 3 punya tanah lebih rendah (menara),
+  // jadi memakai GROUND global membuat gerbangnya melayang di udara.
+  function lockLine(startX, count, groundY) {
+    const gy = groundY === undefined ? GROUND : groundY;
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      out.push({ x: startX + i * LOCK_GAP, y: gy - LOCK_H, w: LOCK_W, h: LOCK_H });
+    }
+    return out;
+  }
+
+  // Batas horizontal celah antara gembok ke-i dan ke-(i+1).
+  function gapBounds(locks, i, pad) {
+    const p = pad === undefined ? PAD : pad;
+    return { left: locks[i].x + LOCK_W + p, right: locks[i + 1].x - p };
+  }
+
+  // Musuh darat di TENGAH celah ke-i. Hanya dipakai di celah TANPA platform.
+  function gapEnemy(locks, i, pad) {
+    const b = gapBounds(locks, i, pad);
+    const w = Math.max(16, Math.min(ENEMY, b.right - b.left));
+    return { x: b.left, y: GROUND - ENEMY, w: ENEMY, h: ENEMY, minX: b.left, maxX: b.left + w };
+  }
+
+  // Platform satu arah di TENGAH celah ke-i. Hanya dipakai di celah TANPA musuh.
+  function gapPlatform(locks, i, y, width) {
+    const b = gapBounds(locks, i);
+    const w = Math.min(width || 140, b.right - b.left);
+    const cx = (b.left + b.right) / 2;
+    return { x: Math.round(cx - w / 2), y: y, w: w, h: 22, solid: false };
+  }
+
+  function ground() {
+    return { x: 0, y: GROUND, w: W, h: H - GROUND, solid: true };
+  }
+
+  // ── Level 1: Hutan Angka ──────────────────────────────────────────
+  // Platform di celah 0,2,4,6,8. Musuh di celah 1,3,5,7 -> 4 musuh.
+  const L1_LOCKS = lockLine(230, 10);
+  const L1_PLATS = [
+    ground(),
+    gapPlatform(L1_LOCKS, 0, 600, 150),
+    gapPlatform(L1_LOCKS, 2, 565, 150),
+    gapPlatform(L1_LOCKS, 4, 600, 150),
+    gapPlatform(L1_LOCKS, 6, 565, 150),
+    gapPlatform(L1_LOCKS, 8, 600, 150)
+  ];
+  const L1 = {
+    id: 1, name: 'Hutan Angka', width: W, height: H,
+    spawn: { x: 60, y: GROUND - 72 },
+    platforms: L1_PLATS,
+    locks: L1_LOCKS,
+    enemies: [
+      gapEnemy(L1_LOCKS, 1),
+      gapEnemy(L1_LOCKS, 3),
+      gapEnemy(L1_LOCKS, 5),
+      gapEnemy(L1_LOCKS, 7)
+    ],
+    trophy: { x: 2660, y: GROUND - 56, w: 56, h: 56 }
+  };
+
+  // ── Level 2: Goa Pangkat ──────────────────────────────────────────
+  // Platform hanya di celah 0,4,8. Musuh di 1,2,3,5,6,7 -> 6 musuh.
+  const L2_LOCKS = lockLine(220, 10);
+  const L2_PLATS = [
+    ground(),
+    gapPlatform(L2_LOCKS, 0, 595, 150),
+    gapPlatform(L2_LOCKS, 4, 562, 150),
+    gapPlatform(L2_LOCKS, 8, 595, 150)
+  ];
+  const L2 = {
+    id: 2, name: 'Goa Pangkat', width: W, height: H,
+    spawn: { x: 60, y: GROUND - 72 },
+    platforms: L2_PLATS,
+    locks: L2_LOCKS,
+    enemies: [
+      gapEnemy(L2_LOCKS, 1),
+      gapEnemy(L2_LOCKS, 3),
+      gapEnemy(L2_LOCKS, 5),
+      gapEnemy(L2_LOCKS, 7)
+    ],
+    trophy: { x: 2660, y: GROUND - 56, w: 56, h: 56 }
+  };
+
+  // ── Level 3: Menara Bintang ───────────────────────────────────────
+  // Level ini MEMAKAI RUANG VERTIKAL dengan cara yang PASTI bekerja:
+  // tanahnya sendiri menanjak seperti tangga raksasa. Pemain tidak perlu
+  // tahu cara memanjat platform one-way — dia cuma berjalan ke kanan, dan
+  // tanahnya naik. Di puncak ada piala.
+  //
+  // Platform one-way TIDAK dipakai untuk tangga karena tidak menahan dari
+  // samping: pemain bisa berjalan di bawahnya dan tidak pernah "mentok".
+  // Itu ditemukan lewat pengujian nyata, bukan teori.
+  const W3 = 3000;
+  const H3 = 1240;
+  const G3 = H3 - 160;                        // tanah dasar = 1080
+  const RISE = 90;                            // naik per anak tangga tanah
+  const STEPS = 5;
+  const TOP3 = G3 - RISE * STEPS;             // puncak = 630
+
+  const L3_LOCKS = lockLine(210, 10, G3);
+
+  // Tanah bertingkat: 5 anak tangga, masing-masing lebar 200px.
+  function stairs3() {
+    const out = [];
+    // Bagian datar tempat 10 gerbang (x 0..2200)
+    out.push({ x: 0, y: G3, w: 2200, h: H3 - G3, solid: true });
+    for (let i = 1; i <= STEPS; i++) {
+      const x = 2200 + (i - 1) * 200;
+      const y = G3 - RISE * i;
+      out.push({ x: x, y: y, w: 200, h: H3 - y, solid: true });
+    }
+    return out;
+  }
+
+  const L3 = {
+    id: 3, name: 'Menara Bintang', width: W3, height: H3,
+    spawn: { x: 60, y: G3 - 72 },
+    platforms: [
+      ...stairs3(),
+      // Hiasan: papan kayu kecil di celah antar gerbang (bukan jalur wajib).
+      gapPlatform(L3_LOCKS, 0, G3 - 150, 150),
+      gapPlatform(L3_LOCKS, 8, G3 - 150, 150)
+    ],
+    locks: L3_LOCKS,
+    enemies: [
+      gapEnemy(L3_LOCKS, 1),
+      gapEnemy(L3_LOCKS, 3),
+      gapEnemy(L3_LOCKS, 5),
+      gapEnemy(L3_LOCKS, 7)
+    ],
+    // Piala di puncak tangga tanah.
+    trophy: { x: 2820, y: TOP3 - 56, w: 56, h: 56 }
+  };
+
+  const LEVELS = { 1: L1, 2: L2, 3: L3 };
+
+  function getLevel(n) {
+    const lv = LEVELS[n];
+    if (!lv) throw new Error('level tidak dikenal: ' + n);
+    return lv;
+  }
+
+  G.Levels = { getLevel, LEVELS, count: 3, LOCK_GAP, LOCK_W, LOCK_H, gapBounds };
+})(globalThis.GK = globalThis.GK || {});
+</script>
+<script>(function (G) {
+  'use strict';
+
+  const KEY = 'kuis-pangkat.progress.v1';
+  const PASS_SCORE = 60;   // minimal skor untuk membuka level berikutnya
+  const LEVEL_COUNT = 3;   // jaga-jaga: level di luar 1..3 selalu "terkunci"
+
+  // Progress: { best: { 1: 80, 2: 60 } }
+  // Status terbuka DITURUNKAN dari skor terbaik, bukan disimpan terpisah.
+  // Konsekuensi penting: kalau pemain sudah lulus level 1 dengan 80 lalu
+  // mengulang dan cuma dapat 50, skor terbaiknya tetap 80 -> level 2 TIDAK
+  // terkunci lagi. Ini yang bikin "sudah pernah lulus" bersifat permanen.
+  function blank() {
+    return { best: {} };
+  }
+
+  function safeRead() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return blank();
+      const p = JSON.parse(raw);
+      if (!p || typeof p !== 'object') return blank();
+      return { best: (p && p.best) || {} };
+    } catch (e) {
+      // localStorage bisa diblokir di file:// — jangan sampai game ikut mati.
+      return blank();
+    }
+  }
+
+  function safeWrite(p) {
+    try { localStorage.setItem(KEY, JSON.stringify(p)); } catch (e) { /* diamkan */ }
+  }
+
+  function bestScore(p, levelId) {
+    const b = p.best[levelId];
+    return typeof b === 'number' ? b : null;
+  }
+
+  function isPassed(p, levelId) {
+    const b = bestScore(p, levelId);
+    return b !== null && b >= PASS_SCORE;
+  }
+
+  function isUnlocked(p, levelId) {
+    if (levelId < 1 || levelId > LEVEL_COUNT) return false;
+    if (levelId === 1) return true;
+    return isPassed(p, levelId - 1);
+  }
+
+  // Dipanggil saat pemain menyentuh piala. Skor terbaik selalu dicatat,
+  // tapi level berikutnya hanya terbuka kalau skor >= PASS_SCORE.
+  function completeLevel(p, levelId, score) {
+    const prev = bestScore(p, levelId);
+    if (prev === null || score > prev) p.best[levelId] = score;
+    safeWrite(p);
+    return p;
+  }
+
+  function reset() {
+    const p = blank();
+    safeWrite(p);
+    return p;
+  }
+
+  G.Progress = {
+    blank, safeRead, safeWrite, bestScore, isPassed, isUnlocked, completeLevel, reset,
+    KEY, PASS_SCORE
+  };
+})(globalThis.GK = globalThis.GK || {});
+</script>
+<script>(function () {
+  'use strict';
+
+  var GK = globalThis.GK;
+  var DIAG = new URLSearchParams(location.search).has('diag');
+
+  // ── elemen ────────────────────────────────────────────────
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var elHome = document.getElementById('home');
+  var elQuiz = document.getElementById('quiz');
+  var elResult = document.getElementById('result');
+  var elOver = document.getElementById('gameover');
+  var elHud = document.getElementById('hud');
+  var elPad = document.getElementById('pad');
+
+  // ── state global ──────────────────────────────────────────
+  var S = {
+    scene: 'home',              // home | play | quiz | result | gameover
+    levelId: 1,
+    level: null,
+    world: null,
+    quiz: null,
+    progress: GK.Progress.safeRead(),
+    seed: 20261112,
+    camX: 0
+  };
+
+  // ── scene switching ───────────────────────────────────────
+  function showScene(name) {
+    S.scene = name;
+    elHome.classList.toggle('on', name === 'home');
+    elQuiz.classList.toggle('on', name === 'quiz');
+    elResult.classList.toggle('on', name === 'result');
+    elOver.classList.toggle('on', name === 'gameover');
+    elHud.classList.toggle('on', name === 'play' || name === 'quiz');
+    elPad.classList.toggle('on', name === 'play');
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  BERANDA
+  // ══════════════════════════════════════════════════════════
+  function renderHome() {
+    var box = document.getElementById('levelCards');
+    box.innerHTML = '';
+    for (var n = 1; n <= GK.Levels.count; n++) {
+      var unlocked = GK.Progress.isUnlocked(S.progress, n);
+      var best = GK.Progress.bestScore(S.progress, n);
+      var passed = GK.Progress.isPassed(S.progress, n);
+
+      var b = document.createElement('button');
+      b.className = 'lv' + (unlocked ? '' : ' locked') + (passed ? ' passed' : '');
+      b.dataset.level = String(n);
+
+      var inner = '<span class="n">' + (unlocked ? n : '🔒') + '</span>';
+      if (unlocked && best !== null) {
+        inner += '<span class="best">' + best + '</span>';
+      } else if (!unlocked) {
+        inner += '<span class="s">Terkunci</span>';
+      } else {
+        inner += '<span class="s">Main</span>';
+      }
+      b.innerHTML = inner;
+
+      if (unlocked) {
+        b.addEventListener('click', (function (lvl) {
+          return function () { startLevel(lvl); };
+        })(n));
+      }
+      box.appendChild(b);
+    }
+  }
+
+  // Level yang boleh dimainkan lewat tombol PLAY:
+  // level tertinggi yang terbuka. Kalau level 1 lulus, PLAY lanjut ke 2.
+  function highestUnlocked() {
+    var hi = 1;
+    for (var n = 1; n <= GK.Levels.count; n++) {
+      if (GK.Progress.isUnlocked(S.progress, n)) hi = n;
+    }
+    return hi;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  MULAI LEVEL
+  // ══════════════════════════════════════════════════════════
+  function startLevel(n) {
+    S.levelId = n;
+    S.level = GK.Levels.getLevel(n);
+    S.world = GK.Physics.makeState(S.level);
+    S.camX = 0;
+
+    // Seed berubah tiap percobaan supaya soal tidak identik saat "Main Lagi".
+    S.seed = (S.seed * 1103515245 + 12345) & 0x7fffffff;
+
+    var questions = GK.Questions.generateLevel(n, S.seed);
+    S.quiz = GK.Quiz.create(n, questions);
+
+    showScene('play');
+    updateHud();
+  }
+
+  function retryLevel() {
+    startLevel(S.levelId);
+  }
+
+  function goHome() {
+    S.world = null;
+    S.quiz = null;
+    renderHome();
+    showScene('home');
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  HUD
+  // ══════════════════════════════════════════════════════════
+  // Nomor soal yang SEDANG TAMPIL. Satu sumber kebenaran, dipakai HUD dan
+  // kartu kuis, supaya keduanya tidak pernah berbeda angka.
+  //  - sedang mengerjakan soal ke-i : index = i-1, locked = false -> index+1
+  //  - baru dijawab (menunggu next) : index sudah naik, locked = true -> index
+  function currentQuestionNo() {
+    if (!S.quiz) return 0;
+    var n = S.quiz.locked ? S.quiz.index : S.quiz.index + 1;
+    return Math.max(1, Math.min(n, S.quiz.questions.length));
+  }
+
+  function updateHud() {
+    if (!S.world) return;
+    var hearts = '';
+    for (var i = 0; i < 3; i++) hearts += i < S.world.lives ? '❤' : '🖤';
+    document.getElementById('hudLives').textContent = hearts;
+
+    var sc = S.quiz ? GK.Quiz.score(S.quiz) : 0;
+    var cur = S.quiz ? currentQuestionNo() : 0;
+    var total = S.quiz ? S.quiz.questions.length : 10;
+    document.getElementById('hudScore').textContent =
+      'Level ' + S.levelId + ' · Skor ' + sc + ' · Soal ' + cur + '/' + total;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  KUIS
+  // ══════════════════════════════════════════════════════════
+  function openQuiz() {
+    var q = GK.Quiz.current(S.quiz);
+    if (!q) { closeQuiz(); return; }
+    S.quiz.open = true;
+    showScene('quiz');
+    drawQuizCard();
+    updateHud();
+  }
+
+  function drawQuizCard() {
+    var q = GK.Quiz.current(S.quiz);
+    if (!q) return closeQuiz();
+
+    // Nomor soal & skor di kartu. Skor diambil dari Quiz.score() yang sudah
+    // memasukkan jawaban sebelumnya — jadi setelah pick() ini mencerminkan
+    // skor terbaru, bukan skor basi.
+    document.getElementById('qNum').textContent =
+      'Soal ' + currentQuestionNo() + ' / ' + S.quiz.questions.length;
+    document.getElementById('qScore').textContent = 'Skor ' + GK.Quiz.score(S.quiz);
+
+    // Soal cerita: kotak narasi biru. Soal biasa: kosong.
+    document.getElementById('qStory').innerHTML =
+      (q.isStory && q.story) ? '<div class="storyBox">' + q.story + '</div>' : '';
+
+    document.getElementById('qPrompt').innerHTML = q.prompt;
+
+    var opts = document.getElementById('qOpts');
+    opts.innerHTML = '';
+    for (var i = 0; i < q.options.length; i++) {
+      var b = document.createElement('button');
+      b.className = 'opt';
+      b.dataset.i = String(i);
+      b.innerHTML = q.options[i];
+      b.addEventListener('click', (function (idx) {
+        return function () { pick(idx); };
+      })(i));
+      opts.appendChild(b);
+    }
+
+    var feed = document.getElementById('qFeed');
+    feed.className = 'feed';
+    feed.innerHTML = '';
+
+    // Sinkronkan HUD setiap kali kartu digambar. Tanpa ini, jalur yang
+    // mengubah index di luar advance() (mis. debug/openQuizAt) membuat HUD
+    // dan kartu menampilkan nomor soal berbeda.
+    updateHud();
+  }
+
+  function pick(i) {
+    if (!S.quiz || !S.quiz.open) return;
+    var q = GK.Quiz.current(S.quiz);
+    if (!q) return;
+
+    var ok = GK.Quiz.isCorrect(S.quiz, i);
+    var btns = document.querySelectorAll('#qOpts .opt');
+
+    // Semua tombol dinonaktifkan supaya tidak bisa dobel jawab.
+    for (var k = 0; k < btns.length; k++) btns[k].disabled = true;
+
+    // Yang BENAR selalu hijau, termasuk saat pemain salah.
+    btns[q.correct].classList.add('right');
+    if (!ok) {
+      btns[i].classList.add('wrong');
+      // Distraktor lain diredupkan supaya fokus ke dua jawaban.
+      for (var m = 0; m < btns.length; m++) {
+        if (m !== q.correct && m !== i) btns[m].classList.add('dim');
+      }
+    }
+
+    // innerHTML, BUKAN textContent: explain berisi &rarr; / &times; / &minus;.
+    var feed = document.getElementById('qFeed');
+    feed.innerHTML = (ok ? '✅ Benar! +10 poin · ' : '❌ Belum tepat. ') + q.explain;
+    feed.className = 'feed show ' + (ok ? 'ok' : 'no');
+
+    GK.Quiz.answer(S.quiz, i);
+    updateHud();
+
+    // Perbarui skor DI KARTU setelah answer(), bukan sebelumnya.
+    // Kalau tidak, kartu menampilkan skor basi ("Skor 0") sementara HUD
+    // sudah menunjukkan "Skor 10" — dua angka berbeda di satu layar.
+    document.getElementById('qScore').textContent = 'Skor ' + GK.Quiz.score(S.quiz);
+
+    // Beri waktu membaca penjelasan, lalu lanjut otomatis.
+    // Salah diberi waktu lebih lama karena ada penjelasan yang perlu dibaca.
+    setTimeout(function () { advance(); }, ok ? 1400 : 2600);
+  }
+
+  function advance() {
+    if (!S.quiz || !S.quiz.locked) return;
+    GK.Quiz.next(S.quiz);
+
+    if (S.quiz.done) {
+      // Semua soal sudah dijawab: buka gembok terakhir, lanjut main.
+      if (S.world) {
+        var li = S.world.pendingLock;
+        if (li >= 0 && S.world.locks[li]) S.world.locks[li].open = true;
+        S.world.pendingLock = -1;
+        // Checkpoint di posisi gembok yang baru dibuka, supaya kalau mati
+        // setelah ini pemain tidak mengulang dari awal level.
+        GK.Physics.setCheckpoint(S.world, S.world.player.x, S.world.player.y - 4);
+      }
+      closeQuiz();
+    } else {
+      S.quiz.open = true;
+      drawQuizCard();
+    }
+  }
+
+  function closeQuiz() {
+    if (S.quiz) S.quiz.open = false;
+    // Kalau dunia masih ada, kembalikan ke permainan. Kalau tidak, ke beranda.
+    if (S.world) showScene('play');
+    else showScene('home');
+    updateHud();
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  HASIL
+  // ══════════════════════════════════════════════════════════
+  function finishLevel() {
+    var sum = GK.Quiz.summary(S.quiz);
+    var passed = sum.score >= GK.Progress.PASS_SCORE;
+
+    // Skor terbaik selalu dicatat, lulus atau tidak.
+    // Level berikutnya hanya terbuka kalau skor >= PASS_SCORE.
+    GK.Progress.completeLevel(S.progress, S.levelId, sum.score);
+
+    var title = document.getElementById('rTitle');
+    var scoreEl = document.getElementById('rScore');
+    var need = document.getElementById('rNeed');
+    var retry = document.getElementById('btnRetry');
+
+    scoreEl.textContent = String(sum.score);
+    scoreEl.className = 'scoreBig ' + (passed ? 'pass' : 'fail');
+    document.getElementById('rLine').textContent =
+      'Benar ' + sum.correct + ' · Salah ' + sum.wrong + ' · dari ' + sum.max + ' poin';
+
+    if (passed) {
+      var isLast = S.levelId >= GK.Levels.count;
+      title.textContent = isLast ? '🏆 Semua level selesai!' : '🏆 Level ' + S.levelId + ' lulus!';
+      need.innerHTML = '';
+      retry.textContent = isLast ? 'MAIN LAGI' : 'NEXT LEVEL';
+    } else {
+      title.textContent = 'Level ' + S.levelId + ' selesai';
+      need.innerHTML = '<div class="need">Belum lulus — butuh minimal ' +
+        GK.Progress.PASS_SCORE + ' untuk membuka level berikutnya. ' +
+        'Kamu benar ' + sum.correct + ' dari ' + S.quiz.questions.length + ' soal.</div>';
+      retry.textContent = 'COBA LAGI';
+    }
+
+    // Rincian benar/salah per soal. Ini yang diminta tampil saat menang.
+    var list = document.getElementById('rList');
+    list.innerHTML = '';
+    for (var i = 0; i < sum.answers.length; i++) {
+      var a = sum.answers[i];
+      var row = document.createElement('div');
+      row.className = 'rRow';
+      // Untuk jawaban salah, tampilkan apa yang dipilih vs yang seharusnya.
+      // Tanpa ini anak hanya tahu "salah" tanpa tahu apa yang benar.
+      var extra = '';
+      if (!a.correct && a.choiceText && a.correctText) {
+        extra = '<span class="ans"><b class="picked">' + a.choiceText + '</b>' +
+                ' &rarr; seharusnya <b class="should">' + a.correctText + '</b></span>';
+      }
+      row.innerHTML =
+        '<span class="mk ' + (a.correct ? 'ok' : 'no') + '">' + (a.correct ? '✓' : '✗') + '</span>' +
+        '<span class="tx">' + (i + 1) + '. ' + a.prompt + extra + '</span>';
+      list.appendChild(row);
+    }
+
+    // Petunjuk "geser" hanya muncul kalau daftarnya memang terpotong.
+    var hint = document.getElementById('rHint');
+    if (hint) {
+      setTimeout(function () {
+        var needsScroll = list.scrollHeight > list.clientHeight + 4;
+        hint.textContent = needsScroll ? '(geser untuk lihat semua)' : '';
+      }, 0);
+    }
+
+    showScene('result');
+  }
+
+  function showGameOver() {
+    showScene('gameover');
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  RENDER DUNIA
+  // ══════════════════════════════════════════════════════════
+  function resize() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.floor(cv.clientWidth * dpr);
+    cv.height = Math.floor(cv.clientHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // Palet per level, supaya tiap level terasa beda tanpa perlu aset.
+  var THEME = {
+    1: { sky1:'#8fd3f4', sky2:'#d6f0ff', hill:'#8ee08a', hill2:'#4fb556', sun:'#ffe680',
+         mtn:'#a9dbe9', mtn2:'#8cc6d6', tree:'#5aa85e', tree2:'#3d7a42', bush:'#6cbf6f' },
+    2: { sky1:'#6f7fd6', sky2:'#b9c4f2', hill:'#7d8fd0', hill2:'#5566a8', sun:'#ffe0a3',
+         mtn:'#8892c8', mtn2:'#727cb4', tree:'#5a6bb0', tree2:'#414d84', bush:'#6d7cc0' },
+    3: { sky1:'#5a4b9c', sky2:'#c9a8e8', hill:'#9b7fc4', hill2:'#6f55a0', sun:'#ffd6f0',
+         mtn:'#7d6aa8', mtn2:'#665591', tree:'#7a5f9c', tree2:'#574270', bush:'#8a70b0' }
+  };
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function render() {
+    var w = cv.clientWidth, h = cv.clientHeight;
+    var lvl = S.level;
+    var th = THEME[S.levelId] || THEME[1];
+
+    // Langit
+    var g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, th.sky1);
+    g.addColorStop(1, th.sky2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+
+    if (!S.world) return;
+
+    // ── SKALA & KAMERA ──────────────────────────────────────────────
+    // Rumus layar: layarX = (duniaX - camX) * scale
+    //
+    // Skala ditentukan dari LEBAR, bukan tinggi. Kalau dari tinggi, di HP
+    // portrait (390x844) skalanya jadi 1.5 dan lebar yang terlihat cuma
+    // 390/1.5 = 259px dunia — gembok pertama (x=300) pun tidak masuk layar.
+    // Dengan VIEW_W=560, pemain melihat ~560px dunia: cukup untuk 2 gembok.
+    // Pilih skala TERBESAR antara "muat lebar" dan "muat tinggi", supaya
+    // layar terisi penuh dan tidak ada langit kosong.
+    //  - muat lebar : w / 560  -> pemain melihat ~560px dunia horizontal
+    //  - muat tinggi: h / 560  -> dunia mengisi tinggi layar
+    // Kalau hanya pakai w/560, di HP portrait (390x844) dunia 560px tinggi
+    // cuma memakai 560 dari 844px layar -> 284px kosong di atas.
+    var VIEW_W = 560;
+    var scale = Math.max(w / VIEW_W, h / lvl.height);
+    if (scale < 0.5) scale = 0.5;
+    if (scale > 2.4) scale = 2.4;
+
+    var viewW = w / scale;
+    var viewH = h / scale;
+    var worldH = lvl.height * scale;
+
+    var p = S.world.player;
+
+    // Kamera X: pemain di 40% lebar layar, dijepit di batas peta.
+    var camX = (p.x + p.w / 2) - viewW * 0.40;
+    camX = Math.max(0, Math.min(lvl.width - viewW, camX));
+    if (lvl.width < viewW) camX = (lvl.width - viewW) / 2;
+
+    // Kamera Y:
+    //  - Kalau dunia lebih PENDEK dari layar: tempelkan ke BAWAH layar, jadi
+    //    tanah selalu di bawah dan sisa ruang di atas jadi langit.
+    //  - Kalau dunia lebih TINGGI: kamera mengikuti pemain.
+    // Dengan skala di atas, worldH selalu >= h, jadi selalu ikut pemain.
+    var camY = (p.y + p.h / 2) - viewH * 0.70;
+    camY = Math.max(0, Math.min(Math.max(0, lvl.height - viewH), camY));
+    var yOffset = -camY * scale;
+
+    S.camX = camX;
+
+    ctx.save();
+    ctx.translate(-camX * scale, yOffset);
+    ctx.scale(scale, scale);
+
+    // ── LATAR BERLAPIS ────────────────────────────────────────────
+    // Di layar portrait langit menempati ~60% layar. Daripada dibiarkan
+    // kosong, diisi pemandangan berlapis: gunung jauh, bukit, pohon, semak,
+    // awan, burung. Semua digambar SEBELUM platform supaya ada di belakang.
+    var gY = lvl.platforms[0].y;             // permukaan tanah
+    var left = camX - 320;
+    var right = camX + viewW + 320;
+
+    // 1. Matahari
+    ctx.fillStyle = th.sun;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.arc(camX + viewW * 0.78, 110, 54, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // 2. Gunung jauh (parallax 0.12) — dua puncak per kelompok, ada salju.
+    var mOff = (camX * 0.12) % 620;
+    for (var mi = -1; mi * 620 - mOff < right; mi++) {
+      var mx = mi * 620 - mOff;
+      ctx.fillStyle = th.mtn;
+      ctx.beginPath();
+      ctx.moveTo(mx, gY); ctx.lineTo(mx + 200, gY - 370); ctx.lineTo(mx + 400, gY);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = th.mtn2;
+      ctx.beginPath();
+      ctx.moveTo(mx + 235, gY); ctx.lineTo(mx + 400, gY - 285); ctx.lineTo(mx + 565, gY);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      ctx.beginPath();
+      ctx.moveTo(mx + 200, gY - 370); ctx.lineTo(mx + 168, gY - 302); ctx.lineTo(mx + 233, gY - 302);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // 3. Bukit tengah (parallax 0.3)
+    var hOff = (camX * 0.3) % 340;
+    ctx.fillStyle = th.hill;
+    for (var hi = -1; hi * 340 - hOff < right; hi++) {
+      var hx = hi * 340 - hOff;
+      ctx.beginPath();
+      ctx.arc(hx + 170, gY + 40, 195, Math.PI, 0);
+      ctx.fill();
+    }
+
+    // 4. Awan (parallax 0.18)
+    var cOff = (camX * 0.18) % 260;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    for (var ci = 0; ci * 260 - cOff < right; ci++) {
+      var cxp = ci * 260 - cOff + 70;
+      // y 190..430: di bawah banner tutorial, di atas puncak gunung.
+      var cyp = 190 + (ci % 4) * 80;
+      var cs = 0.7 + (ci % 3) * 0.22;
+      ctx.beginPath();
+      ctx.arc(cxp, cyp, 30 * cs, 0, Math.PI * 2);
+      ctx.arc(cxp + 30 * cs, cyp + 7 * cs, 23 * cs, 0, Math.PI * 2);
+      ctx.arc(cxp - 30 * cs, cyp + 8 * cs, 21 * cs, 0, Math.PI * 2);
+      ctx.arc(cxp + 5 * cs, cyp - 16 * cs, 23 * cs, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 5. Bintang (hanya level 3 / malam)
+    if (S.levelId === 3) {
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      for (var si = 0; si < 44; si++) {
+        var sx = camX + ((si * 173) % Math.round(viewW + 200));
+        var sy = 40 + ((si * 97) % 320);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1.6 + ((si * 7) % 9) / 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 6. Pohon di tanah (parallax 1, di belakang platform).
+    // Diletakkan hanya di celah yang TIDAK ada platform di atasnya, supaya
+    // pohon tidak menembus papan kayu dan siluetnya tetap bersih.
+    for (var ti = 0; ti < 26; ti++) {
+      var tx = 70 + ti * 112 + ((ti * 53) % 56);
+      if (tx < left || tx > right) continue;
+
+      // Lewati kalau ada platform, gembok, atau area spawn di dekat pohon.
+      // Tanpa ini, pohon menutupi karakter dan siluet gembok jadi kacau.
+      var blocked = false;
+      for (var pi = 0; pi < lvl.platforms.length; pi++) {
+        var pp = lvl.platforms[pi];
+        if (pp.solid) continue;
+        if (tx + 70 > pp.x - 10 && tx - 40 < pp.x + pp.w + 10) { blocked = true; break; }
+      }
+      if (!blocked) {
+        for (var ki = 0; ki < lvl.locks.length; ki++) {
+          var lkk = lvl.locks[ki];
+          if (tx + 70 > lkk.x - 55 && tx - 40 < lkk.x + lkk.w + 55) { blocked = true; break; }
+        }
+      }
+      // Jangan gambar pohon di area spawn (100px pertama).
+      if (tx < lvl.spawn.x + 150) blocked = true;
+      if (blocked) continue;
+
+      ctx.fillStyle = '#8a6a4a';
+      ctx.fillRect(tx + 9, gY - 74, 13, 74);
+      ctx.fillStyle = th.tree;
+      ctx.beginPath();
+      ctx.arc(tx + 15, gY - 92, 35, 0, Math.PI * 2);
+      ctx.arc(tx - 13, gY - 72, 25, 0, Math.PI * 2);
+      ctx.arc(tx + 44, gY - 72, 25, 0, Math.PI * 2);
+      ctx.fill();
+      // Highlight supaya pohon tidak terlihat rata.
+      ctx.fillStyle = th.tree2;
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath();
+      ctx.arc(tx + 26, gY - 66, 22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // 7. Semak rendah di tepi tanah
+    ctx.fillStyle = th.bush;
+    for (var bi = 0; bi < 32; bi++) {
+      var bx = 40 + bi * 92 + ((bi * 37) % 50);
+      if (bx < left || bx > right) continue;
+      ctx.beginPath();
+      ctx.arc(bx, gY - 4, 21, Math.PI, 0);
+      ctx.arc(bx + 24, gY - 2, 16, Math.PI, 0);
+      ctx.fill();
+    }
+
+    // 8. Burung (parallax 0.5) — dua garis melengkung, sayap mengepak.
+    ctx.strokeStyle = 'rgba(40,60,90,0.42)';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    for (var bj = 0; bj < 6; bj++) {
+      var bxp = ((camX * 0.5 + bj * 310) % (viewW + 420)) + camX - 120;
+      var byp = 175 + (bj % 4) * 64 + Math.sin(S.world.t * 1.7 + bj) * 9;
+      ctx.beginPath();
+      ctx.arc(bxp - 9, byp, 9, Math.PI * 1.12, Math.PI * 1.88);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(bxp + 9, byp, 9, Math.PI * 1.12, Math.PI * 1.88);
+      ctx.stroke();
+    }
+
+    // ── Hiasan menara (level 3) ──
+    // Tangga tanah level 3 terlihat seperti bukit biasa. Pilar kayu di setiap
+    // undakan + bendera di puncak membuatnya terbaca sebagai "menara".
+    if (S.levelId === 3) {
+      var steps = lvl.platforms.filter(function (p) { return p.solid; })
+        .sort(function (a, b) { return a.x - b.x; });
+      for (var si = 1; si < steps.length; si++) {
+        var st2 = steps[si];
+        // Pilar di tepi kiri undakan
+        ctx.fillStyle = '#6b4f8a';
+        ctx.fillRect(st2.x + 8, st2.y - 46, 14, 46);
+        ctx.fillStyle = '#8a6bad';
+        ctx.fillRect(st2.x + 8, st2.y - 52, 14, 8);
+        // Lampu kecil di atas pilar
+        ctx.fillStyle = 'rgba(255,220,140,0.85)';
+        ctx.beginPath();
+        ctx.arc(st2.x + 15, st2.y - 58, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Bendera di puncak, di samping piala
+      var top = steps[steps.length - 1];
+      // Dekat piala, bukan di ujung peta: pemain harus melihatnya saat mendaki.
+      var fx = lvl.trophy.x + 90;
+      var fy = top.y;
+      ctx.strokeStyle = '#e8edf5';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(fx, fy - 120);
+      ctx.stroke();
+      // Kain bendera melambai
+      var wave = Math.sin(S.world.t * 3) * 6;
+      ctx.fillStyle = '#ff8fab';
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - 120);
+      ctx.lineTo(fx + 62, fy - 108 + wave);
+      ctx.lineTo(fx, fy - 88);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Platform
+    for (var i = 0; i < lvl.platforms.length; i++) {
+      var pl = lvl.platforms[i];
+      if (pl.solid) {
+        // Tanah: coklat tua di bawah, rumput hijau tebal di permukaan.
+        ctx.fillStyle = '#7a5a3a';
+        ctx.fillRect(pl.x, pl.y + 26, pl.w, pl.h - 26);
+        ctx.fillStyle = th.hill2;
+        ctx.fillRect(pl.x, pl.y + 16, pl.w, 14);
+        ctx.fillStyle = th.hill;
+        ctx.fillRect(pl.x, pl.y, pl.w, 18);
+        // Bintik kerikil supaya tidak rata.
+        ctx.fillStyle = 'rgba(0,0,0,0.10)';
+        for (var gi = 0; gi < 40; gi++) {
+          var gx = pl.x + ((gi * 137) % pl.w);
+          var gy2 = pl.y + 40 + ((gi * 71) % Math.max(1, pl.h - 50));
+          ctx.beginPath();
+          ctx.arc(gx, gy2, 2 + (gi % 3), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        // Platform satu arah: papan kayu dengan bayangan
+        ctx.fillStyle = '#c98a4b';
+        roundRect(pl.x, pl.y, pl.w, pl.h, 8);
+        ctx.fill();
+        ctx.fillStyle = '#a86f38';
+        ctx.fillRect(pl.x + 4, pl.y + pl.h - 6, pl.w - 8, 4);
+      }
+    }
+
+    // Gembok
+    for (var li = 0; li < S.world.locks.length; li++) {
+      var lk = S.world.locks[li];
+      drawLock(lk);
+    }
+
+    // Piala
+    drawTrophy(S.world.trophy);
+
+    // Enemy
+    for (var ei = 0; ei < S.world.enemies.length; ei++) {
+      if (S.world.enemies[ei].alive) drawEnemy(S.world.enemies[ei], S.world.t);
+    }
+
+    // Player
+    drawPlayer(S.world.player, S.world);
+
+    // Petunjuk arah di awal level.
+    // Digambar di koordinat DUNIA (masih di dalam ctx.save/scale), di atas
+    // kepala pemain. Versi lama memakai koordinat layar y=96 sehingga
+    // menutupi langit dan awan.
+    if (S.world.t < 3.6) {
+      var pAlpha = Math.min(1, (3.6 - S.world.t) / 0.9);
+      var bw = 300, bh = 44;
+      var bx = camX + viewW / 2 - bw / 2;
+      var by = gY - 520;
+      ctx.globalAlpha = pAlpha * 0.92;
+      ctx.fillStyle = '#0b1020';
+      roundRect(bx, by, bw, bh, 14);
+      ctx.fill();
+      ctx.globalAlpha = pAlpha;
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 17px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('▶ Jalan ke kanan, buka 10 gembok!', bx + bw / 2, by + 28);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.restore();
+
+    // Efek merah saat kena musuh (koordinat layar, setelah restore).
+    if (S.world.hitFlash > 0) {
+      ctx.fillStyle = 'rgba(255,60,60,' + (S.world.hitFlash * 1.2) + ')';
+      ctx.fillRect(0, 0, w, h);
+    }
+  }
+
+  // Gembok digambar sebagai GERBANG TERKUNCI, bukan gembok raksasa.
+  // Alasannya: gembok harus setinggi 340px supaya tidak bisa dilompati
+  // (lihat src/levels.js), dan gembok 340px terlihat aneh. Gerbang setinggi
+  // itu justru wajar — dan memang itu yang menghalangi jalan.
+  function drawLock(l) {
+    var x = l.x, y = l.y, w = l.w, h = l.h;
+
+    if (l.open) {
+      // Gerbang sudah terbuka: palang kiri-kanan menyingkir, jadi pudar.
+      ctx.globalAlpha = 0.32;
+      ctx.fillStyle = '#39d98a';
+      roundRect(x, y + h * 0.30, w, h * 0.70, 10);
+      ctx.fill();
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = '#0b4a2c';
+      ctx.lineWidth = 9;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.28, y + h * 0.58);
+      ctx.lineTo(x + w * 0.45, y + h * 0.74);
+      ctx.lineTo(x + w * 0.74, y + h * 0.40);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    // ── Tiang gerbang (batu) ──
+    ctx.fillStyle = '#8b93a8';
+    roundRect(x - 5, y, w + 10, h, 8);
+    ctx.fill();
+
+    // ── Papan kayu di dalam tiang ──
+    ctx.fillStyle = '#c98a4b';
+    roundRect(x + 4, y + 14, w - 8, h - 14, 6);
+    ctx.fill();
+    // Garis papan
+    ctx.strokeStyle = 'rgba(120,70,25,0.45)';
+    ctx.lineWidth = 2;
+    for (var py = y + 14; py < y + h - 10; py += 34) {
+      ctx.beginPath();
+      ctx.moveTo(x + 6, py);
+      ctx.lineTo(x + w - 6, py);
+      ctx.stroke();
+    }
+    // Bayangan sisi kanan supaya terlihat 3D
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(x + w - 12, y + 14, 8, h - 14);
+
+    // ── Puncak gerbang melengkung ──
+    ctx.fillStyle = '#a8b0c4';
+    roundRect(x - 9, y - 10, w + 18, 22, 10);
+    ctx.fill();
+
+    // ── Gembok emas di tengah gerbang ──
+    var cx = x + w / 2;
+    var cy = y + h * 0.46;
+    var lw = w * 0.66;                 // lebar badan gembok
+    var lh = lw * 0.78;
+
+    // Gagang gembok (shackle)
+    ctx.strokeStyle = '#e8edf5';
+    ctx.lineWidth = 11;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(cx, cy - lh * 0.52, lw * 0.34, Math.PI, 0);
+    ctx.stroke();
+    ctx.strokeStyle = '#b8c2d4';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy - lh * 0.52, lw * 0.34, Math.PI, 0);
+    ctx.stroke();
+
+    // Badan gembok
+    ctx.fillStyle = '#ffd24a';
+    roundRect(cx - lw / 2, cy - lh * 0.12, lw, lh, 9);
+    ctx.fill();
+    ctx.strokeStyle = '#c47f12';
+    ctx.lineWidth = 3;
+    roundRect(cx - lw / 2, cy - lh * 0.12, lw, lh, 9);
+    ctx.stroke();
+
+    // Kilau
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    roundRect(cx - lw / 2 + 6, cy - lh * 0.04, lw * 0.22, lh * 0.22, 4);
+    ctx.fill();
+
+    // Lubang kunci
+    ctx.fillStyle = '#7a4a00';
+    ctx.beginPath();
+    ctx.arc(cx, cy + lh * 0.30, lw * 0.13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(cx - lw * 0.05, cy + lh * 0.30, lw * 0.10, lh * 0.30);
+  }
+
+  function drawTrophy(t) {
+    var cx = t.x + t.w / 2;
+    // Piala emas
+    ctx.fillStyle = '#ffcf3f';
+    ctx.beginPath();
+    ctx.moveTo(t.x + 8, t.y + 6);
+    ctx.lineTo(t.x + t.w - 8, t.y + 6);
+    ctx.lineTo(t.x + t.w - 14, t.y + t.h * 0.58);
+    ctx.lineTo(t.x + 14, t.y + t.h * 0.58);
+    ctx.closePath();
+    ctx.fill();
+
+    // Gagang
+    ctx.strokeStyle = '#ffcf3f';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(t.x + 4, t.y + 20, 12, Math.PI * 0.5, Math.PI * 1.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(t.x + t.w - 4, t.y + 20, 12, Math.PI * 1.5, Math.PI * 0.5);
+    ctx.stroke();
+
+    // Kaki
+    ctx.fillStyle = '#e0a800';
+    ctx.fillRect(cx - 6, t.y + t.h * 0.58, 12, t.h * 0.22);
+    ctx.fillRect(cx - 20, t.y + t.h * 0.8, 40, 8);
+
+    // Kilau
+    ctx.fillStyle = '#fff8d0';
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.ellipse(t.x + 18, t.y + 20, 5, 12, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawEnemy(e, t) {
+    // Lalat/kelelawar: badan gelap + mata putih + sayap mengepak.
+    var cx = e.x + e.w / 2, cy = e.y + e.h / 2;
+    var flap = Math.sin(t * 14) * 5;
+
+    // Sayap
+    ctx.fillStyle = 'rgba(60,70,110,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(cx - e.w * 0.55, cy - 4 + flap, e.w * 0.45, e.h * 0.3, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx + e.w * 0.55, cy - 4 + flap, e.w * 0.45, e.h * 0.3, 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Badan
+    ctx.fillStyle = '#3d2f6b';
+    ctx.beginPath();
+    ctx.arc(cx, cy, e.w * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mata
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(cx - 5, cy - 2, 4.5, 0, Math.PI * 2);
+    ctx.arc(cx + 5, cy - 2, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(cx - 5, cy - 2, 2, 0, Math.PI * 2);
+    ctx.arc(cx + 5, cy - 2, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Taring kecil
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, cy + 7);
+    ctx.lineTo(cx - 2, cy + 12);
+    ctx.lineTo(cx + 1, cy + 7);
+    ctx.fill();
+  }
+
+  function drawPlayer(p, st) {
+    // Kedip saat tidak bisa dilukai (invuln)
+    if (p.invuln > 0 && Math.floor(p.invuln * 12) % 2 === 0) return;
+
+    var cx = p.x + p.w / 2;
+    var cy = p.y + p.h / 2;
+
+    // Bayangan
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(cx, p.y + p.h + 2, p.w * 0.5, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Badan (blob lucu)
+    ctx.fillStyle = '#ff8fab';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 3, p.w * 0.52, p.h * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#d95f80';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Mata (ikut arah hadap)
+    var ex = p.facing * 3;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(cx - 5 + ex, cy - 2, 5.5, 0, Math.PI * 2);
+    ctx.arc(cx + 5 + ex, cy - 2, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#20143a';
+    ctx.beginPath();
+    ctx.arc(cx - 4 + ex * 1.6, cy - 2, 2.6, 0, Math.PI * 2);
+    ctx.arc(cx + 6 + ex * 1.6, cy - 2, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pipi meruah
+    ctx.fillStyle = 'rgba(255,120,150,0.5)';
+    ctx.beginPath();
+    ctx.arc(cx - 9, cy + 7, 3.5, 0, Math.PI * 2);
+    ctx.arc(cx + 9, cy + 7, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  INPUT
+  // ══════════════════════════════════════════════════════════
+  var keys = { left: false, right: false, up: false, down: false, jump: false };
+
+  function readInput() {
+    return {
+      x: (keys.right ? 1 : 0) - (keys.left ? 1 : 0),
+      jump: keys.up || keys.jump,
+      down: keys.down
+    };
+  }
+
+  var KEYMAP = {
+    ArrowLeft: 'left', KeyA: 'left',
+    ArrowRight: 'right', KeyD: 'right',
+    ArrowUp: 'up', KeyW: 'up',
+    ArrowDown: 'down', KeyS: 'down',
+    Space: 'jump', KeyZ: 'jump'
+  };
+
+  document.addEventListener('keydown', function (ev) {
+    var k = KEYMAP[ev.code];
+    if (k) { keys[k] = true; ev.preventDefault(); }
+    if (ev.code === 'Enter' && S.scene === 'home') startLevel(highestUnlocked());
+  });
+
+  document.addEventListener('keyup', function (ev) {
+    var k = KEYMAP[ev.code];
+    if (k) { keys[k] = false; ev.preventDefault(); }
+  });
+
+  // Kontrol sentuh: pointerdown/up lebih andal daripada touchstart di HP.
+  function bindPad(btn) {
+    var k = btn.dataset.k;
+    var on = function (ev) { ev.preventDefault(); keys[k] = true; };
+    var off = function (ev) { ev.preventDefault(); keys[k] = false; };
+    btn.addEventListener('pointerdown', on);
+    btn.addEventListener('pointerup', off);
+    btn.addEventListener('pointercancel', off);
+    btn.addEventListener('pointerleave', off);
+    btn.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.btn[data-k]'), bindPad);
+
+  // ══════════════════════════════════════════════════════════
+  //  TOMBOL
+  // ══════════════════════════════════════════════════════════
+  document.getElementById('btnPlay').addEventListener('click', function () {
+    startLevel(highestUnlocked());
+  });
+
+  document.getElementById('btnRetry').addEventListener('click', function () {
+    if (S.levelId >= GK.Levels.count && GK.Progress.isPassed(S.progress, S.levelId)) {
+      goHome();
+    } else if (GK.Quiz.summary(S.quiz).score >= GK.Progress.PASS_SCORE) {
+      startLevel(Math.min(S.levelId + 1, GK.Levels.count));
+    } else {
+      retryLevel();
+    }
+  });
+
+  document.getElementById('btnRetry2').addEventListener('click', retryLevel);
+  document.getElementById('btnMenu').addEventListener('click', goHome);
+  document.getElementById('btnMenu2').addEventListener('click', goHome);
+
+  // ══════════════════════════════════════════════════════════
+  //  LOOP
+  // ══════════════════════════════════════════════════════════
+  var last = 0;
+
+  function loop(ts) {
+    var dt = Math.min((ts - last) / 1000 || 0.016, 0.05);
+    last = ts;
+
+    if (S.scene === 'play' && S.world) {
+      GK.Physics.step(S.world, readInput(), S.level, dt);
+
+      if (S.world.pendingLock >= 0) {
+        openQuiz();
+      } else if (S.world.won) {
+        finishLevel();
+      } else if (S.world.gameover) {
+        showGameOver();
+      }
+
+      // Kamera dihitung di render() dari posisi pemain — jangan di sini,
+      // kalau dihitung di dua tempat hasilnya saling menimpa.
+    }
+
+    if (S.scene === 'play' || S.scene === 'quiz') render();
+
+    if (DIAG) {
+      // Hook verifikasi: berhenti setelah satu frame supaya headless bisa
+      // membaca state tanpa perlu rAF yang tidak maju di headless.
+      document.body.dataset.diag = JSON.stringify(snap());
+      return;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  DIAG (untuk verifikasi headless)
+  // ══════════════════════════════════════════════════════════
+  function snap() {
+    var out = {
+      scene: S.scene,
+      levelId: S.levelId,
+      lives: S.world ? S.world.lives : null,
+      locksOpen: S.world ? S.world.locks.filter(function (l) { return l.open; }).length : null,
+      px: S.world ? Math.round(S.world.player.x) : null,
+      py: S.world ? Math.round(S.world.player.y) : null,
+      onGround: S.world ? S.world.player.onGround : null,
+      t: S.world ? +S.world.t.toFixed(2) : null,
+      guard: globalThis.__guard || null,
+      score: S.quiz ? GK.Quiz.score(S.quiz) : null,
+      answered: S.quiz ? S.quiz.answers.length : null,
+      correct: S.quiz ? GK.Quiz.correctCount(S.quiz) : null,
+      wrong: S.quiz ? GK.Quiz.wrongCount(S.quiz) : null,
+      storyCount: S.quiz ? S.quiz.questions.filter(function (q) { return q.isStory; }).length : null,
+      unlocked: [1, 2, 3].map(function (n) { return GK.Progress.isUnlocked(S.progress, n); })
+    };
+    return out;
+  }
+
+  globalThis.GK.debug = {
+    snap: snap,
+    S: S,
+    startLevel: startLevel,
+    // Buka kuis lewat jalur ASLI (drawQuizCard + listener tombol), supaya
+    // pengujian tidak memakai tombol palsu tanpa event handler.
+    openQuizAt: function (i) {
+      if (!S.quiz) return 'belum mulai';
+      S.quiz.index = i || 0;
+      S.quiz.open = true;
+      S.world.pendingLock = 0;
+      showScene('quiz');
+      drawQuizCard();
+      return snap();
+    },
+    // Mainkan otomatis: sentuh semua gembok, jawab soal, sampai piala.
+    // Bot ini HARUS melompati musuh — tanpa melompat, pemain mati 3x dan
+    // autoplay berhenti di gembok ke-2. Itu bukan bug game, itu bug bot.
+    // levelId opsional: default 1 supaya pemanggilan lama tetap jalan.
+    autoplay: function (correctRatio, levelId) {
+      var ratio = correctRatio === undefined ? 1 : correctRatio;
+      startLevel(levelId || 1);
+      var guard = 0;
+      var p = S.world.player;
+
+      var stuck = 0, lastX = -1, jumpHeld = 0;
+
+      while (!S.world.won && !S.world.gameover && guard < 90000) {
+        guard++;
+
+        // Cari musuh terdekat di depan pemain pada ketinggian yang sama.
+        var mustJump = false;
+        for (var i = 0; i < S.world.enemies.length; i++) {
+          var e = S.world.enemies[i];
+          if (!e.alive) continue;
+          var dx = e.x - (p.x + p.w);
+          if (dx > -10 && dx < 90 && Math.abs(e.y - p.y) < 70) mustJump = true;
+        }
+
+        // Mentok = harus naik (tangga menara level 3). jumpHeld memberi jeda
+        // supaya bot benar-benar mendarat di undakan, bukan melompat di tempat.
+        var blockedLock = false;
+        for (var b = 0; b < S.world.locks.length; b++) {
+          var lk = S.world.locks[b];
+          if (!lk.open && p.x + p.w > lk.x - 24 && p.x < lk.x + lk.w) blockedLock = true;
+        }
+        var needClimb = p.onGround && stuck > 6 && jumpHeld <= 0 && !blockedLock;
+
+        keys.right = true;
+        keys.up = (mustJump || needClimb) && p.onGround;
+        if (keys.up) jumpHeld = 26;
+        if (jumpHeld > 0) jumpHeld--;
+
+        GK.Physics.step(S.world, readInput(), S.level, 1 / 60);
+
+        if (Math.abs(p.x - lastX) < 0.5) stuck++; else stuck = 0;
+        lastX = p.x;
+
+        if (S.world.pendingLock >= 0) {
+          var q = GK.Quiz.current(S.quiz);
+          S.quiz.open = true;
+          var wantCorrect = S.quiz.answers.length < Math.round(10 * ratio);
+          var choice = wantCorrect ? q.correct : (q.correct === 0 ? 1 : 0);
+          GK.Quiz.answer(S.quiz, choice);
+          GK.Quiz.next(S.quiz);
+          if (!S.quiz.done) S.quiz.open = true;
+          var li = S.world.pendingLock;
+          S.world.locks[li].open = true;
+          S.world.pendingLock = -1;
+          // Beri kebal sebentar setelah kuis, sama seperti perilaku game.
+          S.world.player.invuln = 0.6;
+        }
+      }
+      keys.right = false;
+      keys.up = false;
+      globalThis.__guard = guard;
+      return snap();
+    }
+  };
+
+  // ══════════════════════════════════════════════════════════
+  //  INIT
+  // ══════════════════════════════════════════════════════════
+  window.addEventListener('resize', resize);
+  resize();
+  renderHome();
+  showScene('home');
+
+  if (DIAG) {
+    // Mode diag: jangan pakai rAF (tidak maju di headless).
+    document.body.dataset.diag = JSON.stringify(snap());
+  } else {
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>

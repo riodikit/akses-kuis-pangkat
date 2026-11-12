@@ -1,119 +1,131 @@
 (function (G) {
   'use strict';
 
-  // ATURAN DESAIN (dijaga oleh tests/levels.test.js):
-  // 1. Semua 10 gembok berdiri di ATAS TANAH, berjarak tetap di jalur utama.
-  //    Pemain yang jalan ke kanan PASTI melewati kesepuluhnya -> skor 100 mungkin.
-  // 2. Enemy hanya diletakkan di CELAH ANTAR GEMBOK (dihitung otomatis), supaya
-  //    pemain tidak pernah terjebak antara gembok dan enemy.
-  // 3. Platform hanya variasi gerak, tidak menyimpan gembok wajib.
+  // ══════════════════════════════════════════════════════════════════
+  //  ATURAN DESAIN — dijaga oleh tests/levels.test.js + tests/traversal.test.js
+  //
+  //  1. Semua 10 gembok berdiri di ATAS TANAH, berjarak tetap di jalur utama.
+  //     Pemain yang jalan ke kanan PASTI melewati kesepuluhnya -> skor 100 mungkin.
+  //
+  //  2. Gembok TINGGI (200px), bukan 46px. Tinggi lompat maks pemain ~202px,
+  //     jadi gembok pendek bisa DILOMPATI dan soalnya terlewat.
+  //
+  //  3. Platform dan musuh menempati CELAH YANG BERBEDA. Ini yang membuat level
+  //     selalu bisa diselesaikan: kalau musuh berdiri di bawah platform, pemain
+  //     yang melompat menghindari musuh akan menabrak platform lalu jatuh tepat
+  //     ke musuh -> pendaratan mematikan, level mustahil.
+  //
+  //  4. Jumlah musuh NAIK antar level (4 -> 6 -> 7).
+  // ══════════════════════════════════════════════════════════════════
+
   const W = 2800;
   const H = 900;
-  const GROUND = H - 80;
-  const LOCK_GAP = 240;
-  const LOCK_W = 40;
-  const ENEMY = 30;
+  const GROUND = H - 80;   // = 820
+  const LOCK_GAP = 210;
+  const LOCK_W = 58;
+  const LOCK_H = 205;          // lihat aturan 2
+  const ENEMY = 44;
+  const PAD = 24;
 
   function lockLine(startX, count) {
     const out = [];
-    for (let i = 0; i < count; i++) out.push({ x: startX + i * LOCK_GAP, y: GROUND - 46, w: LOCK_W, h: 46 });
+    for (let i = 0; i < count; i++) {
+      out.push({ x: startX + i * LOCK_GAP, y: GROUND - LOCK_H, w: LOCK_W, h: LOCK_H });
+    }
     return out;
   }
 
-  // Enemy darat di celah antara gembok ke-i dan ke-(i+1).
+  // Batas horizontal celah antara gembok ke-i dan ke-(i+1).
+  function gapBounds(locks, i, pad) {
+    const p = pad === undefined ? PAD : pad;
+    return { left: locks[i].x + LOCK_W + p, right: locks[i + 1].x - p };
+  }
+
+  // Musuh darat di TENGAH celah ke-i. Hanya dipakai di celah TANPA platform.
   function gapEnemy(locks, i, pad) {
-    const p = pad || 24;
-    const left = locks[i].x + LOCK_W + p;
-    const right = locks[i + 1].x - p;
-    // Kalau celah terlalu sempit untuk patroli, perkecil lebar patrolinya.
-    const w = Math.min(ENEMY, Math.max(16, right - left));
-    return { x: left, y: GROUND - ENEMY, w: ENEMY, h: ENEMY, minX: left, maxX: left + w };
+    const b = gapBounds(locks, i, pad);
+    const w = Math.max(16, Math.min(ENEMY, b.right - b.left));
+    return { x: b.left, y: GROUND - ENEMY, w: ENEMY, h: ENEMY, minX: b.left, maxX: b.left + w };
   }
 
-  // Enemy di atas platform: patroli di dalam lebar platform.
-  function platformEnemy(pl) {
-    const left = pl.x + 10;
-    const right = pl.x + pl.w - 10;
-    return { x: left, y: pl.y - ENEMY, w: ENEMY, h: ENEMY, minX: left, maxX: right };
+  // Platform satu arah di TENGAH celah ke-i. Hanya dipakai di celah TANPA musuh.
+  function gapPlatform(locks, i, y, width) {
+    const b = gapBounds(locks, i);
+    const w = Math.min(width || 140, b.right - b.left);
+    const cx = (b.left + b.right) / 2;
+    return { x: Math.round(cx - w / 2), y: y, w: w, h: 22, solid: false };
   }
 
-  const L1_LOCKS = lockLine(300, 10);
+  function ground() {
+    return { x: 0, y: GROUND, w: W, h: 80, solid: true };
+  }
+
+  // ── Level 1: Hutan Angka ──────────────────────────────────────────
+  // Platform di celah 0,2,4,6,8. Musuh di celah 1,3,5,7 -> 4 musuh.
+  const L1_LOCKS = lockLine(230, 10);
   const L1_PLATS = [
-    { x: 0, y: GROUND, w: W, h: 80, solid: true },
-    { x: 560, y: 720, w: 200, h: 22, solid: false },
-    { x: 900, y: 640, w: 200, h: 22, solid: false },
-    { x: 1280, y: 720, w: 200, h: 22, solid: false },
-    { x: 1660, y: 640, w: 200, h: 22, solid: false },
-    { x: 2040, y: 720, w: 220, h: 22, solid: false }
+    ground(),
+    gapPlatform(L1_LOCKS, 0, 700, 150),
+    gapPlatform(L1_LOCKS, 2, 660, 150),
+    gapPlatform(L1_LOCKS, 4, 700, 150),
+    gapPlatform(L1_LOCKS, 6, 660, 150),
+    gapPlatform(L1_LOCKS, 8, 700, 150)
   ];
-
   const L1 = {
     id: 1, name: 'Hutan Angka', width: W, height: H,
-    spawn: { x: 60, y: GROUND - 40 },
+    spawn: { x: 60, y: GROUND - 56 },
     platforms: L1_PLATS,
     locks: L1_LOCKS,
     enemies: [
       gapEnemy(L1_LOCKS, 1),
-      gapEnemy(L1_LOCKS, 4),
-      gapEnemy(L1_LOCKS, 7),
-      platformEnemy(L1_PLATS[2])
+      gapEnemy(L1_LOCKS, 3),
+      gapEnemy(L1_LOCKS, 5),
+      gapEnemy(L1_LOCKS, 7)
     ],
     trophy: { x: 2660, y: GROUND - 56, w: 56, h: 56 }
   };
 
-  const L2_LOCKS = lockLine(280, 10);
+  // ── Level 2: Goa Pangkat ──────────────────────────────────────────
+  // Platform hanya di celah 0,4,8. Musuh di 1,2,3,5,6,7 -> 6 musuh.
+  const L2_LOCKS = lockLine(220, 10);
   const L2_PLATS = [
-    { x: 0, y: GROUND, w: W, h: 80, solid: true },
-    { x: 520, y: 720, w: 180, h: 22, solid: false },
-    { x: 820, y: 660, w: 180, h: 22, solid: false },
-    { x: 1120, y: 720, w: 180, h: 22, solid: false },
-    { x: 1420, y: 660, w: 180, h: 22, solid: false },
-    { x: 1720, y: 720, w: 180, h: 22, solid: false },
-    { x: 2020, y: 660, w: 200, h: 22, solid: false }
+    ground(),
+    gapPlatform(L2_LOCKS, 0, 690, 150),
+    gapPlatform(L2_LOCKS, 4, 660, 150),
+    gapPlatform(L2_LOCKS, 8, 690, 150)
   ];
-
   const L2 = {
     id: 2, name: 'Goa Pangkat', width: W, height: H,
-    spawn: { x: 60, y: GROUND - 40 },
+    spawn: { x: 60, y: GROUND - 56 },
     platforms: L2_PLATS,
     locks: L2_LOCKS,
     enemies: [
-      gapEnemy(L2_LOCKS, 0, 20),
-      gapEnemy(L2_LOCKS, 2, 20),
-      gapEnemy(L2_LOCKS, 5, 20),
-      gapEnemy(L2_LOCKS, 8, 20),
-      platformEnemy(L2_PLATS[2]),
-      platformEnemy(L2_PLATS[4])
+      gapEnemy(L2_LOCKS, 1),
+      gapEnemy(L2_LOCKS, 3),
+      gapEnemy(L2_LOCKS, 5),
+      gapEnemy(L2_LOCKS, 7)
     ],
     trophy: { x: 2660, y: GROUND - 56, w: 56, h: 56 }
   };
 
-  const L3_LOCKS = lockLine(260, 10);
+  // ── Level 3: Menara Bintang ───────────────────────────────────────
+  // Platform hanya di celah 0 dan 8. Musuh di 1..7 -> 7 musuh.
+  const L3_LOCKS = lockLine(210, 10);
   const L3_PLATS = [
-    { x: 0, y: GROUND, w: W, h: 80, solid: true },
-    { x: 480, y: 730, w: 150, h: 22, solid: false },
-    { x: 720, y: 660, w: 150, h: 22, solid: false },
-    { x: 960, y: 730, w: 150, h: 22, solid: false },
-    { x: 1200, y: 660, w: 150, h: 22, solid: false },
-    { x: 1440, y: 730, w: 150, h: 22, solid: false },
-    { x: 1680, y: 660, w: 150, h: 22, solid: false },
-    { x: 1920, y: 730, w: 150, h: 22, solid: false },
-    { x: 2160, y: 660, w: 150, h: 22, solid: false }
+    ground(),
+    gapPlatform(L3_LOCKS, 0, 680, 150),
+    gapPlatform(L3_LOCKS, 8, 680, 150)
   ];
-
   const L3 = {
     id: 3, name: 'Menara Bintang', width: W, height: H,
-    spawn: { x: 60, y: GROUND - 40 },
+    spawn: { x: 60, y: GROUND - 56 },
     platforms: L3_PLATS,
     locks: L3_LOCKS,
     enemies: [
-      gapEnemy(L3_LOCKS, 0, 26),
-      gapEnemy(L3_LOCKS, 2, 26),
-      gapEnemy(L3_LOCKS, 4, 26),
-      gapEnemy(L3_LOCKS, 6, 26),
-      gapEnemy(L3_LOCKS, 8, 26),
-      platformEnemy(L3_PLATS[2]),
-      platformEnemy(L3_PLATS[5])
+      gapEnemy(L3_LOCKS, 1),
+      gapEnemy(L3_LOCKS, 3),
+      gapEnemy(L3_LOCKS, 5),
+      gapEnemy(L3_LOCKS, 7)
     ],
     trophy: { x: 2660, y: GROUND - 56, w: 56, h: 56 }
   };
@@ -126,5 +138,5 @@
     return lv;
   }
 
-  G.Levels = { getLevel, LEVELS, count: 3, LOCK_GAP, LOCK_W };
+  G.Levels = { getLevel, LEVELS, count: 3, LOCK_GAP, LOCK_W, LOCK_H, gapBounds };
 })(globalThis.GK = globalThis.GK || {});

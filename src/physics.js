@@ -30,7 +30,7 @@
       hitFlash: 0,
       checkpoint: { x: level.spawn.x, y: level.spawn.y },
       player: {
-        x: level.spawn.x, y: level.spawn.y, w: 26, h: 34,
+        x: level.spawn.x, y: level.spawn.y, w: 52, h: 68,
         vx: 0, vy: 0, onGround: false, facing: 1,
         coyote: 0, buffer: 0, drop: 0, invuln: 0
       },

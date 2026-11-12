@@ -134,6 +134,10 @@ canvas{display:block;width:100%;height:100%;image-rendering:auto}
 .hud .hearts{font-size:clamp(16px,4.4vw,22px);letter-spacing:2px;
   background:#0b1020aa;border-radius:999px;padding:4px 12px;
   text-shadow:0 1px 2px #00000066}
+.hud .mute{pointer-events:auto;width:38px;height:38px;border-radius:50%;border:0;
+  background:#0b1020aa;color:#fff;font-size:17px;font-weight:900;cursor:pointer;
+  font-family:inherit;display:grid;place-items:center;margin-left:8px}
+.hud .mute.off{opacity:.45;text-decoration:line-through}
 .hud .score{font-size:clamp(13px,3.6vw,17px);background:#0b1020aa;border-radius:999px;
   padding:5px 14px}
 
@@ -219,6 +223,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:auto}
 <div class="hud" id="hud">
   <div class="hearts" id="hudLives">❤❤❤</div>
   <div class="score" id="hudScore">Level 1 · Skor 0</div>
+  <button class="mute" id="btnMute" title="Musik">♪</button>
 </div>
 
 <!-- ── KONTROL SENTUH ── -->
@@ -239,6 +244,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:auto}
 <script>/*__QUIZ__*/</script>
 <script>/*__PHYSICS__*/</script>
 <script>/*__LEVELS__*/</script>
+<script>/*__MUSIC__*/</script>
 <script>/*__PROGRESS__*/</script>
 <script>/*__GAME__*/</script>
 </body>

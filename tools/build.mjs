@@ -18,6 +18,7 @@ const FILES = {
   '/*__QUIZ__*/': 'src/quiz.js',
   '/*__PHYSICS__*/': 'src/physics.js',
   '/*__LEVELS__*/': 'src/levels.js',
+  '/*__MUSIC__*/': 'src/music.js',
   '/*__PROGRESS__*/': 'src/progress.js',
   '/*__GAME__*/': 'src/game.js'
 };

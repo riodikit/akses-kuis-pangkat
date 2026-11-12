@@ -64,7 +64,10 @@
 
       if (unlocked) {
         b.addEventListener('click', (function (lvl) {
-          return function () { startLevel(lvl); };
+          return function () {
+            GK.Music.start();
+            startLevel(lvl);
+          };
         })(n));
       }
       box.appendChild(b);
@@ -232,21 +235,27 @@
     if (!S.quiz || !S.quiz.locked) return;
     GK.Quiz.next(S.quiz);
 
-    if (S.quiz.done) {
-      // Semua soal sudah dijawab: buka gembok terakhir, lanjut main.
-      if (S.world) {
-        var li = S.world.pendingLock;
-        if (li >= 0 && S.world.locks[li]) S.world.locks[li].open = true;
-        S.world.pendingLock = -1;
-        // Checkpoint di posisi gembok yang baru dibuka, supaya kalau mati
-        // setelah ini pemain tidak mengulang dari awal level.
-        GK.Physics.setCheckpoint(S.world, S.world.player.x, S.world.player.y - 4);
-      }
-      closeQuiz();
-    } else {
-      S.quiz.open = true;
-      drawQuizCard();
+    // ── SATU GEMBOK = SATU SOAL ──────────────────────────────────────
+    // Setelah dijawab, gembok itu TERBUKA dan pemain DIKEMBALIKAN ke dunia.
+    // Pemain jalan lagi, lalu menyentuh gembok berikutnya -> soal berikutnya.
+    //
+    // Versi lama langsung membuka soal berikutnya di tempat ("S.quiz.open =
+    // true; drawQuizCard()"), sehingga 10 soal muncul beruntun tanpa pemain
+    // pernah kembali bermain. Itu yang membuat alurnya terasa salah.
+    if (S.world) {
+      var li = S.world.pendingLock;
+      if (li >= 0 && S.world.locks[li]) S.world.locks[li].open = true;
+      S.world.pendingLock = -1;
+
+      // Beri kebal sebentar setelah kuis: pemain sering muncul tepat di
+      // samping musuh, dan mati tanpa sempat bergerak itu tidak adil.
+      S.world.player.invuln = 0.9;
+
+      // Checkpoint di gembok yang baru dibuka.
+      GK.Physics.setCheckpoint(S.world, S.world.player.x, S.world.player.y - 4);
     }
+
+    closeQuiz();
   }
 
   function closeQuiz() {
@@ -939,8 +948,22 @@
   //  TOMBOL
   // ══════════════════════════════════════════════════════════
   document.getElementById('btnPlay').addEventListener('click', function () {
+    // Musik baru boleh mulai dari klik user: browser memblokir audio
+    // yang diputar otomatis tanpa interaksi.
+    GK.Music.start();
     startLevel(highestUnlocked());
   });
+
+  // Tombol mute musik di HUD.
+  var btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    btnMute.addEventListener('click', function () {
+      var m = GK.Music.toggleMute();
+      btnMute.classList.toggle('off', m);
+      btnMute.textContent = m ? '♪' : '♪';
+      btnMute.title = m ? 'Musik mati' : 'Musik hidup';
+    });
+  }
 
   document.getElementById('btnRetry').addEventListener('click', function () {
     if (S.levelId >= GK.Levels.count && GK.Progress.isPassed(S.progress, S.levelId)) {
@@ -952,7 +975,10 @@
     }
   });
 
-  document.getElementById('btnRetry2').addEventListener('click', retryLevel);
+  document.getElementById('btnRetry2').addEventListener('click', function () {
+    GK.Music.start();
+    retryLevel();
+  });
   document.getElementById('btnMenu').addEventListener('click', goHome);
   document.getElementById('btnMenu2').addEventListener('click', goHome);
 
@@ -1098,6 +1124,12 @@
   // ══════════════════════════════════════════════════════════
   //  INIT
   // ══════════════════════════════════════════════════════════
+  // Jeda musik saat tab tidak terlihat supaya tidak berbunyi di latar.
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) GK.Music.stop();
+    else if (S.scene !== 'home') GK.Music.start();
+  });
+
   window.addEventListener('resize', resize);
   resize();
   renderHome();

@@ -37,7 +37,9 @@ antar percobaan. Kesulitan naik per level:
 
 - **Level 1 — Hutan Angka:** perkalian & pembagian pangkat
 - **Level 2 — Goa Pangkat:** tambah pangkat nol & pangkat negatif
-- **Level 3 — Menara Bintang:** pangkat dari pangkat & campuran
+- **Level 3 — Menara Bintang:** pangkat dari pangkat & campuran.
+  Setelah 10 gerbang, tanahnya menanjak 5 tingkat menuju piala di puncak —
+  level ini benar-benar mendaki, bukan cuma jalan ke kanan.
 
 Tiap level punya **3 soal cerita** (dari 10) dengan konteks nyata — bukan
 sekadar "hitung 2³ × 2²", tapi misalnya *"Sari di gudang olahraga menemukan
@@ -77,7 +79,12 @@ Jangan ubah angka-angka ini tanpa menjalankan `node --test`:
    platform membuat pemain yang melompat menabrak platform lalu jatuh ke
    musuh — level jadi mustahil.
 3. **Semua platform harus terjangkau** (≤183px di atas tanah).
-4. **Semua gembok di atas tanah** dan berjarak ≥60px satu sama lain.
+4. **Semua gembok menempel permukaan tanah di bawahnya** dan berjarak
+   ≥60px satu sama lain.
+5. **Tangga level 3 memakai TANAH BERTINGKAT, bukan platform one-way.**
+   Platform `solid:false` tidak menahan dari samping, jadi pemain bisa
+   berjalan di bawahnya dan tidak pernah "mentok" — level jadi mustahil.
+   Tanah bertingkat menghalangi dari samping, jadi pemain wajib mendaki.
 
 `tests/traversal.test.js` memainkan ketiga level otomatis sampai piala,
 termasuk skenario pemain yang melompat terus-menerus.

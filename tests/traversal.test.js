@@ -11,15 +11,15 @@ const L = globalThis.GK.Levels;
 // bisa dilewati -> test GAGAL.
 
 function play(levelId, opts) {
-  const o = opts || {};
   const lvl = L.getLevel(levelId);
   const st = P.makeState(lvl);
   const p = st.player;
   let guard = 0;
   let maxX = 0;
+  let stuck = 0, lastX = -1, jumpHeld = 0;
   const touched = new Set();
 
-  while (!st.won && !st.gameover && guard < 60000) {
+  while (!st.won && !st.gameover && guard < 90000) {
     guard++;
 
     let mustJump = false;
@@ -29,7 +29,18 @@ function play(levelId, opts) {
       if (dx > -10 && dx < 90 && Math.abs(e.y - p.y) < 70) mustJump = true;
     }
 
-    const input = { x: 1, jump: mustJump && p.onGround, down: false };
+    // Mentok = harus naik (tangga menara level 3). jumpHeld memberi jeda
+    // supaya bot benar-benar mendarat di undakan berikutnya, bukan melompat
+    // berulang di tempat.
+    const blockedLock = st.locks.some(l => !l.open && p.x + p.w > l.x - 24 && p.x < l.x + l.w);
+    const needClimb = p.onGround && stuck > 6 && jumpHeld <= 0 && !blockedLock;
+
+    // Saat perlu naik (mentok), JANGAN tahan kanan: bot akan menempel dinding
+    // dan melompat di tempat. Berhenti mendorong membuat lompatan vertikal.
+    const input = { x: needClimb ? 0 : 1, jump: (mustJump || needClimb) && p.onGround, down: false };
+    if (input.jump) jumpHeld = 26;
+    if (jumpHeld > 0) jumpHeld--;
+
     P.step(st, input, lvl, 1 / 60);
     if (p.x > maxX) maxX = p.x;
 
@@ -38,7 +49,11 @@ function play(levelId, opts) {
       st.locks[st.pendingLock].open = true;
       st.pendingLock = -1;
       p.invuln = 0.6;
+      stuck = 0;
     }
+
+    if (Math.abs(p.x - lastX) < 0.5) stuck++; else stuck = 0;
+    lastX = p.x;
   }
   return { st, touched: touched.size, maxX, guard };
 }
@@ -86,6 +101,8 @@ function kangaroo(levelId) {
   let touched = 0, guard = 0;
   while (!st.won && !st.gameover && guard < 60000) {
     guard++;
+    // "Lompat terus" di sini berarti: melompat setiap kali menyentuh tanah.
+    // Itu skenario terburuk untuk GEMBOK (bisa mendarat di atas gerbang).
     P.step(st, { x: 1, jump: p.onGround, down: false }, lvl, 1 / 60);
     if (st.pendingLock >= 0) {
       touched++;

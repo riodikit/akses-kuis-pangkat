@@ -23,7 +23,14 @@ function walk(lvl, maxSeconds) {
     const input = { x: 1, jump: false, down: false };
 
     const blockingLock = st.locks.some(l => !l.open && p.x + p.w > l.x - 24 && p.x < l.x + l.w);
-    if (p.onGround && stuck > 10 && jumpHeld <= 0 && !blockingLock) { input.jump = true; jumpHeld = 22; }
+    // jumpHeld dipakai supaya bot TIDAK melompat berulang tanpa mendarat:
+    // tanpa jeda ini bot menempel di dinding dan tidak pernah naik tangga.
+    if (p.onGround && stuck > 6 && jumpHeld <= 0 && !blockingLock) {
+      input.jump = true; jumpHeld = 26;
+      // Jangan tahan kanan saat mendaki: bot akan menempel dinding dan
+      // melompat di tempat, tidak pernah naik.
+      input.x = 0;
+    }
     if (jumpHeld > 0) jumpHeld--;
 
     P.step(st, input, lvl, DT);
@@ -52,10 +59,16 @@ for (const n of [1, 2, 3]) {
 test('setiap gembok berdiri tepat di atas tanah', () => {
   for (const n of [1, 2, 3]) {
     const lvl = L.getLevel(n);
-    const ground = lvl.platforms.find(p => p.solid && p.x === 0 && p.w === lvl.width);
-    assert.ok(ground, 'level ' + n + ' harus punya tanah penuh');
+    // Level 3 punya tanah BERTINGKAT (tangga raksasa), jadi tidak ada satu
+    // tanah selebar peta. Yang diuji: setiap gembok dasarnya menyentuh
+    // permukaan tanah di x-nya sendiri.
     for (const l of lvl.locks) {
-      assert.equal(l.y + l.h, ground.y, 'level ' + n + ' gembok x=' + l.x + ' tidak di tanah');
+      const under = lvl.platforms
+        .filter(p => p.solid && p.x <= l.x && p.x + p.w >= l.x + l.w)
+        .sort((a, b) => a.y - b.y)[0];
+      assert.ok(under, 'level ' + n + ' gembok x=' + l.x + ' tidak punya tanah di bawahnya');
+      assert.equal(l.y + l.h, under.y,
+        'level ' + n + ' gembok x=' + l.x + ' tidak menempel tanah (' + (l.y + l.h) + ' vs ' + under.y + ')');
     }
   }
 });
@@ -83,7 +96,15 @@ test('semua gembok di dalam batas peta dan layar', () => {
 test('piala di ujung kanan dan tidak menempel gembok terakhir', () => {
   for (const n of [1, 2, 3]) {
     const lvl = L.getLevel(n);
-    assert.ok(lvl.trophy.x > lvl.width - 250, 'level ' + n);
+    // Level 3 punya piala di PUNCAK MENARA, bukan di ujung kanan peta.
+    // Yang wajib: piala di paruh kanan peta dan jauh di atas tanah.
+    if (n === 3) {
+      const g3 = lvl.platforms.find(p => p.solid);
+      assert.ok(lvl.trophy.x > lvl.width * 0.8, 'piala level 3 harus di kanan');
+      assert.ok(lvl.trophy.y < g3.y - 400, 'piala level 3 harus di puncak menara');
+    } else {
+      assert.ok(lvl.trophy.x > lvl.width - 250, 'level ' + n);
+    }
     const last = lvl.locks.slice().sort((a, b) => a.x - b.x).pop();
     assert.ok(lvl.trophy.x > last.x + last.w + 40, 'piala level ' + n + ' terlalu dekat gembok');
   }
@@ -102,14 +123,23 @@ test('enemy tidak menutupi gembok (pemain tidak terjebak)', () => {
   }
 });
 
-test('semua platform lebih rendah dari batas lompat (bisa dijangkau)', () => {
+test('setiap platform bisa dijangkau dari tanah ATAU dari platform lain', () => {
+  // Level 3 punya menara: platform atas tidak terjangkau langsung dari tanah,
+  // tapi terjangkau dari undakan di bawahnya. Yang penting tidak ada platform
+  // yang mustahil dijangkau dari mana pun.
   for (const n of [1, 2, 3]) {
     const lvl = L.getLevel(n);
-    const ground = lvl.platforms.find(p => p.solid);
-    for (const p of lvl.platforms) {
-      if (p.solid) continue;
-      const rise = ground.y - p.y;
-      assert.ok(rise <= P.MAX_JUMP_H - 20, 'level ' + n + ' platform y=' + p.y + ' terlalu tinggi (' + rise + 'px)');
+    const plats = lvl.platforms.filter(p => !p.solid);
+    for (const p of plats) {
+      let best = Infinity;
+      for (const q of lvl.platforms) {
+        if (q === p) continue;
+        const rise = q.y - p.y;            // positif = p lebih tinggi dari q
+        if (rise <= 0) continue;           // q tidak di bawah p
+        if (rise < best) best = rise;
+      }
+      assert.ok(best <= P.MAX_JUMP_H - 20,
+        'level ' + n + ' platform y=' + p.y + ' tidak terjangkau (naik ' + best + 'px)');
     }
   }
 });

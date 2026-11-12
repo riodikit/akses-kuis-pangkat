@@ -29,10 +29,13 @@
   const ENEMY = 44;
   const PAD = 24;
 
-  function lockLine(startX, count) {
+  // groundY WAJIB diberikan: level 3 punya tanah lebih rendah (menara),
+  // jadi memakai GROUND global membuat gerbangnya melayang di udara.
+  function lockLine(startX, count, groundY) {
+    const gy = groundY === undefined ? GROUND : groundY;
     const out = [];
     for (let i = 0; i < count; i++) {
-      out.push({ x: startX + i * LOCK_GAP, y: GROUND - LOCK_H, w: LOCK_W, h: LOCK_H });
+      out.push({ x: startX + i * LOCK_GAP, y: gy - LOCK_H, w: LOCK_W, h: LOCK_H });
     }
     return out;
   }
@@ -111,17 +114,45 @@
   };
 
   // ── Level 3: Menara Bintang ───────────────────────────────────────
-  // Platform hanya di celah 0 dan 8. Musuh di 1..7 -> 7 musuh.
-  const L3_LOCKS = lockLine(210, 10);
-  const L3_PLATS = [
-    ground(),
-    gapPlatform(L3_LOCKS, 0, 590, 150),
-    gapPlatform(L3_LOCKS, 8, 590, 150)
-  ];
+  // Level ini MEMAKAI RUANG VERTIKAL dengan cara yang PASTI bekerja:
+  // tanahnya sendiri menanjak seperti tangga raksasa. Pemain tidak perlu
+  // tahu cara memanjat platform one-way — dia cuma berjalan ke kanan, dan
+  // tanahnya naik. Di puncak ada piala.
+  //
+  // Platform one-way TIDAK dipakai untuk tangga karena tidak menahan dari
+  // samping: pemain bisa berjalan di bawahnya dan tidak pernah "mentok".
+  // Itu ditemukan lewat pengujian nyata, bukan teori.
+  const W3 = 3000;
+  const H3 = 1240;
+  const G3 = H3 - 160;                        // tanah dasar = 1080
+  const RISE = 90;                            // naik per anak tangga tanah
+  const STEPS = 5;
+  const TOP3 = G3 - RISE * STEPS;             // puncak = 630
+
+  const L3_LOCKS = lockLine(210, 10, G3);
+
+  // Tanah bertingkat: 5 anak tangga, masing-masing lebar 200px.
+  function stairs3() {
+    const out = [];
+    // Bagian datar tempat 10 gerbang (x 0..2200)
+    out.push({ x: 0, y: G3, w: 2200, h: H3 - G3, solid: true });
+    for (let i = 1; i <= STEPS; i++) {
+      const x = 2200 + (i - 1) * 200;
+      const y = G3 - RISE * i;
+      out.push({ x: x, y: y, w: 200, h: H3 - y, solid: true });
+    }
+    return out;
+  }
+
   const L3 = {
-    id: 3, name: 'Menara Bintang', width: W, height: H,
-    spawn: { x: 60, y: GROUND - 72 },
-    platforms: L3_PLATS,
+    id: 3, name: 'Menara Bintang', width: W3, height: H3,
+    spawn: { x: 60, y: G3 - 72 },
+    platforms: [
+      ...stairs3(),
+      // Hiasan: papan kayu kecil di celah antar gerbang (bukan jalur wajib).
+      gapPlatform(L3_LOCKS, 0, G3 - 150, 150),
+      gapPlatform(L3_LOCKS, 8, G3 - 150, 150)
+    ],
     locks: L3_LOCKS,
     enemies: [
       gapEnemy(L3_LOCKS, 1),
@@ -129,7 +160,8 @@
       gapEnemy(L3_LOCKS, 5),
       gapEnemy(L3_LOCKS, 7)
     ],
-    trophy: { x: 2660, y: GROUND - 56, w: 56, h: 56 }
+    // Piala di puncak tangga tanah.
+    trophy: { x: 2820, y: TOP3 - 56, w: 56, h: 56 }
   };
 
   const LEVELS = { 1: L1, 2: L2, 3: L3 };

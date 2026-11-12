@@ -555,6 +555,48 @@
       ctx.stroke();
     }
 
+    // ── Hiasan menara (level 3) ──
+    // Tangga tanah level 3 terlihat seperti bukit biasa. Pilar kayu di setiap
+    // undakan + bendera di puncak membuatnya terbaca sebagai "menara".
+    if (S.levelId === 3) {
+      var steps = lvl.platforms.filter(function (p) { return p.solid; })
+        .sort(function (a, b) { return a.x - b.x; });
+      for (var si = 1; si < steps.length; si++) {
+        var st2 = steps[si];
+        // Pilar di tepi kiri undakan
+        ctx.fillStyle = '#6b4f8a';
+        ctx.fillRect(st2.x + 8, st2.y - 46, 14, 46);
+        ctx.fillStyle = '#8a6bad';
+        ctx.fillRect(st2.x + 8, st2.y - 52, 14, 8);
+        // Lampu kecil di atas pilar
+        ctx.fillStyle = 'rgba(255,220,140,0.85)';
+        ctx.beginPath();
+        ctx.arc(st2.x + 15, st2.y - 58, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Bendera di puncak, di samping piala
+      var top = steps[steps.length - 1];
+      // Dekat piala, bukan di ujung peta: pemain harus melihatnya saat mendaki.
+      var fx = lvl.trophy.x + 90;
+      var fy = top.y;
+      ctx.strokeStyle = '#e8edf5';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(fx, fy - 120);
+      ctx.stroke();
+      // Kain bendera melambai
+      var wave = Math.sin(S.world.t * 3) * 6;
+      ctx.fillStyle = '#ff8fab';
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - 120);
+      ctx.lineTo(fx + 62, fy - 108 + wave);
+      ctx.lineTo(fx, fy - 88);
+      ctx.closePath();
+      ctx.fill();
+    }
+
     // Platform
     for (var i = 0; i < lvl.platforms.length; i++) {
       var pl = lvl.platforms[i];
@@ -998,7 +1040,9 @@
       var guard = 0;
       var p = S.world.player;
 
-      while (!S.world.won && !S.world.gameover && guard < 60000) {
+      var stuck = 0, lastX = -1, jumpHeld = 0;
+
+      while (!S.world.won && !S.world.gameover && guard < 90000) {
         guard++;
 
         // Cari musuh terdekat di depan pemain pada ketinggian yang sama.
@@ -1007,15 +1051,27 @@
           var e = S.world.enemies[i];
           if (!e.alive) continue;
           var dx = e.x - (p.x + p.w);
-          // Musuh di depan, dekat, dan sejajar tinggi -> lompat.
           if (dx > -10 && dx < 90 && Math.abs(e.y - p.y) < 70) mustJump = true;
         }
 
-        // juga lompat kalau mentok (tidak maju) supaya tidak tersangkut.
+        // Mentok = harus naik (tangga menara level 3). jumpHeld memberi jeda
+        // supaya bot benar-benar mendarat di undakan, bukan melompat di tempat.
+        var blockedLock = false;
+        for (var b = 0; b < S.world.locks.length; b++) {
+          var lk = S.world.locks[b];
+          if (!lk.open && p.x + p.w > lk.x - 24 && p.x < lk.x + lk.w) blockedLock = true;
+        }
+        var needClimb = p.onGround && stuck > 6 && jumpHeld <= 0 && !blockedLock;
+
         keys.right = true;
-        keys.up = mustJump && p.onGround;
+        keys.up = (mustJump || needClimb) && p.onGround;
+        if (keys.up) jumpHeld = 26;
+        if (jumpHeld > 0) jumpHeld--;
 
         GK.Physics.step(S.world, readInput(), S.level, 1 / 60);
+
+        if (Math.abs(p.x - lastX) < 0.5) stuck++; else stuck = 0;
+        lastX = p.x;
 
         if (S.world.pendingLock >= 0) {
           var q = GK.Quiz.current(S.quiz);

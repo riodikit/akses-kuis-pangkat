@@ -100,7 +100,12 @@ canvas{display:block;width:100%;height:100%;image-rendering:auto}
 .scoreBig.pass{color:#1f9d63}
 .scoreBig.fail{color:#d24a4a}
 .scoreLine{font-size:clamp(13px,3.6vw,16px);font-weight:800;color:#2b3a63;margin-bottom:14px}
-.rList{text-align:left;max-height:30vh;overflow-y:auto;margin:0 0 12px;
+.rListHead{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:11px;font-weight:800;letter-spacing:.5px;color:#5a6a8f;
+  text-transform:uppercase;margin:0 0 4px;padding-top:10px}
+.rListHead #rHint{font-weight:700;text-transform:none;letter-spacing:0;opacity:.7}
+.rList{text-align:left;max-height:32vh;overflow-y:auto;margin:0 0 12px;
+  -webkit-overflow-scrolling:touch;
   border-top:2px dashed #e2e8f5;padding-top:10px}
 .rRow{display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12.5px;
   border-bottom:1px solid #eef2fa}
@@ -109,6 +114,9 @@ canvas{display:block;width:100%;height:100%;image-rendering:auto}
 .rRow .mk.no{color:#d24a4a}
 .rRow .tx{flex:1;color:#22304f;font-weight:600;line-height:1.4}
 .rRow .tx sup{font-size:.68em;vertical-align:super}
+.rRow .ans{display:block;margin-top:3px;font-size:11.5px;font-weight:700}
+.rRow .ans .picked{color:#c62828}
+.rRow .ans .should{color:#1f9d63}
 .need{background:#ffeaea;color:#7a1414;border-radius:12px;padding:10px 14px;
   font-size:13px;font-weight:800;margin-bottom:12px}
 .rowBtns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
@@ -123,7 +131,9 @@ canvas{display:block;width:100%;height:100%;image-rendering:auto}
   align-items:center;padding:10px 14px;z-index:6;pointer-events:none;
   font-weight:900;color:#fff;text-shadow:0 2px 0 #00000055}
 .hud.on{display:flex}
-.hud .hearts{font-size:clamp(16px,4.4vw,22px);letter-spacing:2px}
+.hud .hearts{font-size:clamp(16px,4.4vw,22px);letter-spacing:2px;
+  background:#0b1020aa;border-radius:999px;padding:4px 12px;
+  text-shadow:0 1px 2px #00000066}
 .hud .score{font-size:clamp(13px,3.6vw,17px);background:#0b1020aa;border-radius:999px;
   padding:5px 14px}
 
@@ -184,6 +194,7 @@ canvas{display:block;width:100%;height:100%;image-rendering:auto}
     <div class="scoreBig" id="rScore">0</div>
     <div class="scoreLine" id="rLine">Benar 0 · Salah 0</div>
     <div id="rNeed"></div>
+    <div class="rListHead">Rincian jawaban <span id="rHint">(geser)</span></div>
     <div class="rList" id="rList"></div>
     <div class="rowBtns">
       <button id="btnRetry" class="btn2">MAIN LAGI</button>

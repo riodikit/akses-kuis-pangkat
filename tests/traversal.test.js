@@ -69,3 +69,39 @@ test('gembok tidak bisa dilompati: tinggi gembok menutup jalur lompat', () => {
       'gembok terlalu pendek (' + tinggiGembok + 'px) — pemain bisa melompatinya');
   }
 });
+
+// Bot "kanguru": lari ke kanan sambil LOMPAT TERUS tanpa henti. Ini skenario
+// terburuk — pemain iseng yang tidak pernah berhenti melompat. Kalau gembok
+// terlalu pendek, dia bisa mendarat di atas gembok dan melompat lagi,
+// sehingga soal terlewat. Ditemukan lewat pengujian nyata: gembok 205px
+// hanya tersentuh 7 dari 10.
+function kangaroo(levelId) {
+  const lvl = L.getLevel(levelId);
+  const st = P.makeState(lvl);
+  const p = st.player;
+  // Musuh dimatikan: test ini menguji GEOMETRI GEMBOK, bukan kemampuan bot
+  // menghindari musuh. Kalau musuh dibiarkan, bot kanguru mati di level 3
+  // dan hasilnya tidak lagi mengukur hal yang mau diukur.
+  st.enemies.forEach(e => { e.alive = false; });
+  let touched = 0, guard = 0;
+  while (!st.won && !st.gameover && guard < 60000) {
+    guard++;
+    P.step(st, { x: 1, jump: p.onGround, down: false }, lvl, 1 / 60);
+    if (st.pendingLock >= 0) {
+      touched++;
+      st.locks[st.pendingLock].open = true;
+      st.pendingLock = -1;
+      p.invuln = 0.6;
+    }
+  }
+  return { touched, won: st.won };
+}
+
+for (const lvl of [1, 2, 3]) {
+  test('level ' + lvl + ': gembok tetap tersentuh walau pemain lompat terus', () => {
+    const r = kangaroo(lvl);
+    assert.equal(r.touched, 10,
+      'level ' + lvl + ' hanya ' + r.touched + '/10 gembok saat pemain lompat terus — ' +
+      'pemain bisa mendarat di atas gembok dan melewati soalnya');
+  });
+}

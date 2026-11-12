@@ -30,7 +30,13 @@
     if (!s.open || s.done) return s;
     const q = current(s);
     const ok = q.correct === choice;
-    s.answers.push({ id: q.id, choice: choice, correct: ok, prompt: q.prompt, explain: q.explain });
+    s.answers.push({
+      id: q.id, choice: choice, correct: ok, prompt: q.prompt, explain: q.explain,
+      // Teks jawaban disimpan supaya layar hasil bisa menampilkan
+      // "kamu pilih 2⁶ · yang benar 2⁵" — bukan cuma ✓/✗ tanpa penjelasan.
+      choiceText: q.options[choice],
+      correctText: q.options[q.correct]
+    });
     s.lastCorrect = ok;
     s.open = false;
     s.locked = true;

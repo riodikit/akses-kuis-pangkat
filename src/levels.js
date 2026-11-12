@@ -7,8 +7,10 @@
   //  1. Semua 10 gembok berdiri di ATAS TANAH, berjarak tetap di jalur utama.
   //     Pemain yang jalan ke kanan PASTI melewati kesepuluhnya -> skor 100 mungkin.
   //
-  //  2. Gembok TINGGI (200px), bukan 46px. Tinggi lompat maks pemain ~202px,
-  //     jadi gembok pendek bisa DILOMPATI dan soalnya terlewat.
+  //  2. Gembok TINGGI (340px). Tinggi lompat maks pemain ~203px, jadi secara
+  //     teori 205px sudah cukup. TAPI pemain bisa mendarat DI ATAS gembok
+  //     lalu melompat lagi, sehingga 205px masih bisa dilewati (terbukti:
+  //     hanya 7/10 gembok tersentuh). 340px menutup jalur itu sepenuhnya.
   //
   //  3. Platform dan musuh menempati CELAH YANG BERBEDA. Ini yang membuat level
   //     selalu bisa diselesaikan: kalau musuh berdiri di bawah platform, pemain
@@ -20,10 +22,10 @@
 
   const W = 2800;
   const H = 900;
-  const GROUND = H - 80;   // = 820
+  const GROUND = H - 160;  // = 740, pita tanah 160px (tebal, bukan garis tipis)
   const LOCK_GAP = 210;
-  const LOCK_W = 58;
-  const LOCK_H = 205;          // lihat aturan 2
+  const LOCK_W = 78;
+  const LOCK_H = 340;          // lihat aturan 2
   const ENEMY = 44;
   const PAD = 24;
 
@@ -57,7 +59,7 @@
   }
 
   function ground() {
-    return { x: 0, y: GROUND, w: W, h: 80, solid: true };
+    return { x: 0, y: GROUND, w: W, h: H - GROUND, solid: true };
   }
 
   // ── Level 1: Hutan Angka ──────────────────────────────────────────
@@ -65,15 +67,15 @@
   const L1_LOCKS = lockLine(230, 10);
   const L1_PLATS = [
     ground(),
-    gapPlatform(L1_LOCKS, 0, 700, 150),
-    gapPlatform(L1_LOCKS, 2, 660, 150),
-    gapPlatform(L1_LOCKS, 4, 700, 150),
-    gapPlatform(L1_LOCKS, 6, 660, 150),
-    gapPlatform(L1_LOCKS, 8, 700, 150)
+    gapPlatform(L1_LOCKS, 0, 600, 150),
+    gapPlatform(L1_LOCKS, 2, 565, 150),
+    gapPlatform(L1_LOCKS, 4, 600, 150),
+    gapPlatform(L1_LOCKS, 6, 565, 150),
+    gapPlatform(L1_LOCKS, 8, 600, 150)
   ];
   const L1 = {
     id: 1, name: 'Hutan Angka', width: W, height: H,
-    spawn: { x: 60, y: GROUND - 56 },
+    spawn: { x: 60, y: GROUND - 72 },
     platforms: L1_PLATS,
     locks: L1_LOCKS,
     enemies: [
@@ -90,13 +92,13 @@
   const L2_LOCKS = lockLine(220, 10);
   const L2_PLATS = [
     ground(),
-    gapPlatform(L2_LOCKS, 0, 690, 150),
-    gapPlatform(L2_LOCKS, 4, 660, 150),
-    gapPlatform(L2_LOCKS, 8, 690, 150)
+    gapPlatform(L2_LOCKS, 0, 595, 150),
+    gapPlatform(L2_LOCKS, 4, 562, 150),
+    gapPlatform(L2_LOCKS, 8, 595, 150)
   ];
   const L2 = {
     id: 2, name: 'Goa Pangkat', width: W, height: H,
-    spawn: { x: 60, y: GROUND - 56 },
+    spawn: { x: 60, y: GROUND - 72 },
     platforms: L2_PLATS,
     locks: L2_LOCKS,
     enemies: [
@@ -113,12 +115,12 @@
   const L3_LOCKS = lockLine(210, 10);
   const L3_PLATS = [
     ground(),
-    gapPlatform(L3_LOCKS, 0, 680, 150),
-    gapPlatform(L3_LOCKS, 8, 680, 150)
+    gapPlatform(L3_LOCKS, 0, 590, 150),
+    gapPlatform(L3_LOCKS, 8, 590, 150)
   ];
   const L3 = {
     id: 3, name: 'Menara Bintang', width: W, height: H,
-    spawn: { x: 60, y: GROUND - 56 },
+    spawn: { x: 60, y: GROUND - 72 },
     platforms: L3_PLATS,
     locks: L3_LOCKS,
     enemies: [

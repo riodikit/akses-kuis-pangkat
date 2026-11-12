@@ -87,3 +87,17 @@ test('skor 10 soal benar = 100', () => {
   assert.equal(Z.score(s), 100);
   assert.equal(s.done, true);
 });
+
+test('answer mencatat teks jawaban yang dipilih dan jawaban benar', () => {
+  const s = Z.create(1, QS);
+  s.open = true;
+  const q0 = Z.current(s);
+  const wrongPick = q0.correct === 0 ? 1 : 0;
+  Z.answer(s, wrongPick);
+  const a = s.answers[0];
+  // Ini yang membuat layar hasil bisa menampilkan "kamu pilih X, yang benar Y"
+  // — tanpa ini, anak hanya tahu salah tapi tidak tahu apa yang seharusnya.
+  assert.equal(a.choiceText, q0.options[wrongPick], 'teks pilihan pemain');
+  assert.equal(a.correctText, q0.options[q0.correct], 'teks jawaban benar');
+  assert.equal(a.correct, false);
+});

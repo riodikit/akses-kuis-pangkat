@@ -114,6 +114,16 @@
   // ══════════════════════════════════════════════════════════
   //  HUD
   // ══════════════════════════════════════════════════════════
+  // Nomor soal yang SEDANG TAMPIL. Satu sumber kebenaran, dipakai HUD dan
+  // kartu kuis, supaya keduanya tidak pernah berbeda angka.
+  //  - sedang mengerjakan soal ke-i : index = i-1, locked = false -> index+1
+  //  - baru dijawab (menunggu next) : index sudah naik, locked = true -> index
+  function currentQuestionNo() {
+    if (!S.quiz) return 0;
+    var n = S.quiz.locked ? S.quiz.index : S.quiz.index + 1;
+    return Math.max(1, Math.min(n, S.quiz.questions.length));
+  }
+
   function updateHud() {
     if (!S.world) return;
     var hearts = '';
@@ -121,10 +131,7 @@
     document.getElementById('hudLives').textContent = hearts;
 
     var sc = S.quiz ? GK.Quiz.score(S.quiz) : 0;
-    // Nomor soal = index soal yang SEDANG dibuka + 1. Jangan pakai
-    // answers.length: itu menghitung jawaban yang sudah masuk, sehingga
-    // saat soal ke-2 dibuka HUD masih menulis "Soal 1/10" (basi).
-    var cur = S.quiz ? Math.min(S.quiz.index + 1, S.quiz.questions.length) : 0;
+    var cur = S.quiz ? currentQuestionNo() : 0;
     var total = S.quiz ? S.quiz.questions.length : 10;
     document.getElementById('hudScore').textContent =
       'Level ' + S.levelId + ' · Skor ' + sc + ' · Soal ' + cur + '/' + total;
@@ -150,7 +157,7 @@
     // memasukkan jawaban sebelumnya — jadi setelah pick() ini mencerminkan
     // skor terbaru, bukan skor basi.
     document.getElementById('qNum').textContent =
-      'Soal ' + (S.quiz.index + 1) + ' / ' + S.quiz.questions.length;
+      'Soal ' + currentQuestionNo() + ' / ' + S.quiz.questions.length;
     document.getElementById('qScore').textContent = 'Skor ' + GK.Quiz.score(S.quiz);
 
     // Soal cerita: kotak narasi biru. Soal biasa: kosong.
@@ -175,6 +182,11 @@
     var feed = document.getElementById('qFeed');
     feed.className = 'feed';
     feed.innerHTML = '';
+
+    // Sinkronkan HUD setiap kali kartu digambar. Tanpa ini, jalur yang
+    // mengubah index di luar advance() (mis. debug/openQuizAt) membuat HUD
+    // dan kartu menampilkan nomor soal berbeda.
+    updateHud();
   }
 
   function pick(i) {
@@ -286,10 +298,26 @@
       var a = sum.answers[i];
       var row = document.createElement('div');
       row.className = 'rRow';
+      // Untuk jawaban salah, tampilkan apa yang dipilih vs yang seharusnya.
+      // Tanpa ini anak hanya tahu "salah" tanpa tahu apa yang benar.
+      var extra = '';
+      if (!a.correct && a.choiceText && a.correctText) {
+        extra = '<span class="ans"><b class="picked">' + a.choiceText + '</b>' +
+                ' &rarr; seharusnya <b class="should">' + a.correctText + '</b></span>';
+      }
       row.innerHTML =
         '<span class="mk ' + (a.correct ? 'ok' : 'no') + '">' + (a.correct ? '✓' : '✗') + '</span>' +
-        '<span class="tx">' + (i + 1) + '. ' + a.prompt + '</span>';
+        '<span class="tx">' + (i + 1) + '. ' + a.prompt + extra + '</span>';
       list.appendChild(row);
+    }
+
+    // Petunjuk "geser" hanya muncul kalau daftarnya memang terpotong.
+    var hint = document.getElementById('rHint');
+    if (hint) {
+      setTimeout(function () {
+        var needsScroll = list.scrollHeight > list.clientHeight + 4;
+        hint.textContent = needsScroll ? '(geser untuk lihat semua)' : '';
+      }, 0);
     }
 
     showScene('result');
@@ -311,9 +339,12 @@
 
   // Palet per level, supaya tiap level terasa beda tanpa perlu aset.
   var THEME = {
-    1: { sky1: '#8fd3f4', sky2: '#d6f0ff', hill: '#8ee08a', hill2: '#4fb556', sun: '#ffe680' },
-    2: { sky1: '#6f7fd6', sky2: '#b9c4f2', hill: '#7d8fd0', hill2: '#5566a8', sun: '#ffe0a3' },
-    3: { sky1: '#5a4b9c', sky2: '#c9a8e8', hill: '#9b7fc4', hill2: '#6f55a0', sun: '#ffd6f0' }
+    1: { sky1:'#8fd3f4', sky2:'#d6f0ff', hill:'#8ee08a', hill2:'#4fb556', sun:'#ffe680',
+         mtn:'#a9dbe9', mtn2:'#8cc6d6', tree:'#5aa85e', tree2:'#3d7a42', bush:'#6cbf6f' },
+    2: { sky1:'#6f7fd6', sky2:'#b9c4f2', hill:'#7d8fd0', hill2:'#5566a8', sun:'#ffe0a3',
+         mtn:'#8892c8', mtn2:'#727cb4', tree:'#5a6bb0', tree2:'#414d84', bush:'#6d7cc0' },
+    3: { sky1:'#5a4b9c', sky2:'#c9a8e8', hill:'#9b7fc4', hill2:'#6f55a0', sun:'#ffd6f0',
+         mtn:'#7d6aa8', mtn2:'#665591', tree:'#7a5f9c', tree2:'#574270', bush:'#8a70b0' }
   };
 
   function roundRect(x, y, w, h, r) {
@@ -384,61 +415,166 @@
     ctx.translate(-camX * scale, yOffset);
     ctx.scale(scale, scale);
 
-    // Matahari: koordinat dunia, jadi ikut bergeser sedikit (bukan fixed).
+    // ── LATAR BERLAPIS ────────────────────────────────────────────
+    // Di layar portrait langit menempati ~60% layar. Daripada dibiarkan
+    // kosong, diisi pemandangan berlapis: gunung jauh, bukit, pohon, semak,
+    // awan, burung. Semua digambar SEBELUM platform supaya ada di belakang.
+    var gY = lvl.platforms[0].y;             // permukaan tanah
+    var left = camX - 320;
+    var right = camX + viewW + 320;
+
+    // 1. Matahari
     ctx.fillStyle = th.sun;
     ctx.globalAlpha = 0.9;
     ctx.beginPath();
-    ctx.arc(camX + viewW * 0.82, 90, 46, 0, Math.PI * 2);
+    ctx.arc(camX + viewW * 0.78, 110, 54, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // Bukit parallax: bergerak 0.35x dari kamera.
+    // 2. Gunung jauh (parallax 0.12) — dua puncak per kelompok, ada salju.
+    var mOff = (camX * 0.12) % 620;
+    for (var mi = -1; mi * 620 - mOff < right; mi++) {
+      var mx = mi * 620 - mOff;
+      ctx.fillStyle = th.mtn;
+      ctx.beginPath();
+      ctx.moveTo(mx, gY); ctx.lineTo(mx + 200, gY - 370); ctx.lineTo(mx + 400, gY);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = th.mtn2;
+      ctx.beginPath();
+      ctx.moveTo(mx + 235, gY); ctx.lineTo(mx + 400, gY - 285); ctx.lineTo(mx + 565, gY);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      ctx.beginPath();
+      ctx.moveTo(mx + 200, gY - 370); ctx.lineTo(mx + 168, gY - 302); ctx.lineTo(mx + 233, gY - 302);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // 3. Bukit tengah (parallax 0.3)
+    var hOff = (camX * 0.3) % 340;
     ctx.fillStyle = th.hill;
-    var hillOff = (camX * 0.35) % 420;
-    for (var hx = -hillOff - 420; hx < camX + viewW + 420; hx += 420) {
+    for (var hi = -1; hi * 340 - hOff < right; hi++) {
+      var hx = hi * 340 - hOff;
       ctx.beginPath();
-      ctx.arc(hx + 210, lvl.height - 40, 210, Math.PI, 0);
+      ctx.arc(hx + 170, gY + 40, 195, Math.PI, 0);
       ctx.fill();
     }
 
-    // Awan (parallax 0.2) — mengisi langit.
-    var cloudOff = (camX * 0.2) % 480;
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    for (var ci = 0; ci < 5; ci++) {
-      var cxp = ci * 480 - cloudOff + 60;
-      var cyp = 60 + (ci % 3) * 54;
-      var cs = 0.75 + (ci % 2) * 0.4;
+    // 4. Awan (parallax 0.18)
+    var cOff = (camX * 0.18) % 260;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    for (var ci = 0; ci * 260 - cOff < right; ci++) {
+      var cxp = ci * 260 - cOff + 70;
+      // y 190..430: di bawah banner tutorial, di atas puncak gunung.
+      var cyp = 190 + (ci % 4) * 80;
+      var cs = 0.7 + (ci % 3) * 0.22;
       ctx.beginPath();
-      ctx.arc(cxp, cyp, 26 * cs, 0, Math.PI * 2);
-      ctx.arc(cxp + 26 * cs, cyp + 6 * cs, 20 * cs, 0, Math.PI * 2);
-      ctx.arc(cxp - 26 * cs, cyp + 7 * cs, 18 * cs, 0, Math.PI * 2);
-      ctx.arc(cxp + 4 * cs, cyp - 14 * cs, 20 * cs, 0, Math.PI * 2);
+      ctx.arc(cxp, cyp, 30 * cs, 0, Math.PI * 2);
+      ctx.arc(cxp + 30 * cs, cyp + 7 * cs, 23 * cs, 0, Math.PI * 2);
+      ctx.arc(cxp - 30 * cs, cyp + 8 * cs, 21 * cs, 0, Math.PI * 2);
+      ctx.arc(cxp + 5 * cs, cyp - 16 * cs, 23 * cs, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Bintang di level 3 (malam).
+    // 5. Bintang (hanya level 3 / malam)
     if (S.levelId === 3) {
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      for (var si = 0; si < 30; si++) {
-        var sx = ((si * 137) % Math.round(lvl.width)) ;
-        var sy = ((si * 79) % 200) + 20;
-        var tw = 1.5 + ((si * 7) % 10) / 9;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      for (var si = 0; si < 44; si++) {
+        var sx = camX + ((si * 173) % Math.round(viewW + 200));
+        var sy = 40 + ((si * 97) % 320);
         ctx.beginPath();
-        ctx.arc(sx, sy, tw, 0, Math.PI * 2);
+        ctx.arc(sx, sy, 1.6 + ((si * 7) % 9) / 7, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
+    // 6. Pohon di tanah (parallax 1, di belakang platform).
+    // Diletakkan hanya di celah yang TIDAK ada platform di atasnya, supaya
+    // pohon tidak menembus papan kayu dan siluetnya tetap bersih.
+    for (var ti = 0; ti < 26; ti++) {
+      var tx = 70 + ti * 112 + ((ti * 53) % 56);
+      if (tx < left || tx > right) continue;
+
+      // Lewati kalau ada platform, gembok, atau area spawn di dekat pohon.
+      // Tanpa ini, pohon menutupi karakter dan siluet gembok jadi kacau.
+      var blocked = false;
+      for (var pi = 0; pi < lvl.platforms.length; pi++) {
+        var pp = lvl.platforms[pi];
+        if (pp.solid) continue;
+        if (tx + 70 > pp.x - 10 && tx - 40 < pp.x + pp.w + 10) { blocked = true; break; }
+      }
+      if (!blocked) {
+        for (var ki = 0; ki < lvl.locks.length; ki++) {
+          var lkk = lvl.locks[ki];
+          if (tx + 70 > lkk.x - 55 && tx - 40 < lkk.x + lkk.w + 55) { blocked = true; break; }
+        }
+      }
+      // Jangan gambar pohon di area spawn (100px pertama).
+      if (tx < lvl.spawn.x + 150) blocked = true;
+      if (blocked) continue;
+
+      ctx.fillStyle = '#8a6a4a';
+      ctx.fillRect(tx + 9, gY - 74, 13, 74);
+      ctx.fillStyle = th.tree;
+      ctx.beginPath();
+      ctx.arc(tx + 15, gY - 92, 35, 0, Math.PI * 2);
+      ctx.arc(tx - 13, gY - 72, 25, 0, Math.PI * 2);
+      ctx.arc(tx + 44, gY - 72, 25, 0, Math.PI * 2);
+      ctx.fill();
+      // Highlight supaya pohon tidak terlihat rata.
+      ctx.fillStyle = th.tree2;
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath();
+      ctx.arc(tx + 26, gY - 66, 22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // 7. Semak rendah di tepi tanah
+    ctx.fillStyle = th.bush;
+    for (var bi = 0; bi < 32; bi++) {
+      var bx = 40 + bi * 92 + ((bi * 37) % 50);
+      if (bx < left || bx > right) continue;
+      ctx.beginPath();
+      ctx.arc(bx, gY - 4, 21, Math.PI, 0);
+      ctx.arc(bx + 24, gY - 2, 16, Math.PI, 0);
+      ctx.fill();
+    }
+
+    // 8. Burung (parallax 0.5) — dua garis melengkung, sayap mengepak.
+    ctx.strokeStyle = 'rgba(40,60,90,0.42)';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    for (var bj = 0; bj < 6; bj++) {
+      var bxp = ((camX * 0.5 + bj * 310) % (viewW + 420)) + camX - 120;
+      var byp = 175 + (bj % 4) * 64 + Math.sin(S.world.t * 1.7 + bj) * 9;
+      ctx.beginPath();
+      ctx.arc(bxp - 9, byp, 9, Math.PI * 1.12, Math.PI * 1.88);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(bxp + 9, byp, 9, Math.PI * 1.12, Math.PI * 1.88);
+      ctx.stroke();
+    }
 
     // Platform
     for (var i = 0; i < lvl.platforms.length; i++) {
       var pl = lvl.platforms[i];
       if (pl.solid) {
+        // Tanah: coklat tua di bawah, rumput hijau tebal di permukaan.
+        ctx.fillStyle = '#7a5a3a';
+        ctx.fillRect(pl.x, pl.y + 26, pl.w, pl.h - 26);
         ctx.fillStyle = th.hill2;
-        ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
-        // Strip rumput di atas tanah
+        ctx.fillRect(pl.x, pl.y + 16, pl.w, 14);
         ctx.fillStyle = th.hill;
-        ctx.fillRect(pl.x, pl.y, pl.w, 12);
+        ctx.fillRect(pl.x, pl.y, pl.w, 18);
+        // Bintik kerikil supaya tidak rata.
+        ctx.fillStyle = 'rgba(0,0,0,0.10)';
+        for (var gi = 0; gi < 40; gi++) {
+          var gx = pl.x + ((gi * 137) % pl.w);
+          var gy2 = pl.y + 40 + ((gi * 71) % Math.max(1, pl.h - 50));
+          ctx.beginPath();
+          ctx.arc(gx, gy2, 2 + (gi % 3), 0, Math.PI * 2);
+          ctx.fill();
+        }
       } else {
         // Platform satu arah: papan kayu dengan bayangan
         ctx.fillStyle = '#c98a4b';
@@ -466,75 +602,129 @@
     // Player
     drawPlayer(S.world.player, S.world);
 
+    // Petunjuk arah di awal level.
+    // Digambar di koordinat DUNIA (masih di dalam ctx.save/scale), di atas
+    // kepala pemain. Versi lama memakai koordinat layar y=96 sehingga
+    // menutupi langit dan awan.
+    if (S.world.t < 3.6) {
+      var pAlpha = Math.min(1, (3.6 - S.world.t) / 0.9);
+      var bw = 300, bh = 44;
+      var bx = camX + viewW / 2 - bw / 2;
+      var by = gY - 520;
+      ctx.globalAlpha = pAlpha * 0.92;
+      ctx.fillStyle = '#0b1020';
+      roundRect(bx, by, bw, bh, 14);
+      ctx.fill();
+      ctx.globalAlpha = pAlpha;
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 17px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('▶ Jalan ke kanan, buka 10 gembok!', bx + bw / 2, by + 28);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    }
+
     ctx.restore();
 
-    // Efek merah saat kena musuh
+    // Efek merah saat kena musuh (koordinat layar, setelah restore).
     if (S.world.hitFlash > 0) {
       ctx.fillStyle = 'rgba(255,60,60,' + (S.world.hitFlash * 1.2) + ')';
       ctx.fillRect(0, 0, w, h);
     }
-
-    // Petunjuk arah di awal level.
-    // DITARUH DI ATAS pita permainan (bukan di bawah): pemain spawn di kiri
-    // bawah, dan kotak yang diletakkan di h-120 menutupi karakternya.
-    if (S.world.t < 3.2 && S.camX < 120) {
-      ctx.save();
-      ctx.globalAlpha = Math.min(1, (3.2 - S.world.t) / 0.8);
-      var bw = Math.min(w - 40, 320);
-      ctx.fillStyle = '#0b1020cc';
-      roundRect(w / 2 - bw / 2, 96, bw, 48, 14);
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 15px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('▶ Jalan ke kanan, buka 10 gembok!', w / 2, 126);
-      ctx.restore();
-    }
   }
 
+  // Gembok digambar sebagai GERBANG TERKUNCI, bukan gembok raksasa.
+  // Alasannya: gembok harus setinggi 340px supaya tidak bisa dilompati
+  // (lihat src/levels.js), dan gembok 340px terlihat aneh. Gerbang setinggi
+  // itu justru wajar — dan memang itu yang menghalangi jalan.
   function drawLock(l) {
     var x = l.x, y = l.y, w = l.w, h = l.h;
+
     if (l.open) {
-      // Gembok terbuka: geser ke samping dan jadi pudar (sudah dijawab).
-      ctx.globalAlpha = 0.35;
+      // Gerbang sudah terbuka: palang kiri-kanan menyingkir, jadi pudar.
+      ctx.globalAlpha = 0.32;
       ctx.fillStyle = '#39d98a';
-      roundRect(x, y + h * 0.4, w, h * 0.6, 6);
+      roundRect(x, y + h * 0.30, w, h * 0.70, 10);
       ctx.fill();
-      // Centang
+      ctx.globalAlpha = 0.9;
       ctx.strokeStyle = '#0b4a2c';
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 9;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(x + w * 0.25, y + h * 0.72);
-      ctx.lineTo(x + w * 0.45, y + h * 0.9);
-      ctx.lineTo(x + w * 0.78, y + h * 0.52);
+      ctx.moveTo(x + w * 0.28, y + h * 0.58);
+      ctx.lineTo(x + w * 0.45, y + h * 0.74);
+      ctx.lineTo(x + w * 0.74, y + h * 0.40);
       ctx.stroke();
       ctx.globalAlpha = 1;
       return;
     }
 
-    // Badan gembok kuning
+    // ── Tiang gerbang (batu) ──
+    ctx.fillStyle = '#8b93a8';
+    roundRect(x - 5, y, w + 10, h, 8);
+    ctx.fill();
+
+    // ── Papan kayu di dalam tiang ──
+    ctx.fillStyle = '#c98a4b';
+    roundRect(x + 4, y + 14, w - 8, h - 14, 6);
+    ctx.fill();
+    // Garis papan
+    ctx.strokeStyle = 'rgba(120,70,25,0.45)';
+    ctx.lineWidth = 2;
+    for (var py = y + 14; py < y + h - 10; py += 34) {
+      ctx.beginPath();
+      ctx.moveTo(x + 6, py);
+      ctx.lineTo(x + w - 6, py);
+      ctx.stroke();
+    }
+    // Bayangan sisi kanan supaya terlihat 3D
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(x + w - 12, y + 14, 8, h - 14);
+
+    // ── Puncak gerbang melengkung ──
+    ctx.fillStyle = '#a8b0c4';
+    roundRect(x - 9, y - 10, w + 18, 22, 10);
+    ctx.fill();
+
+    // ── Gembok emas di tengah gerbang ──
+    var cx = x + w / 2;
+    var cy = y + h * 0.46;
+    var lw = w * 0.66;                 // lebar badan gembok
+    var lh = lw * 0.78;
+
+    // Gagang gembok (shackle)
+    ctx.strokeStyle = '#e8edf5';
+    ctx.lineWidth = 11;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(cx, cy - lh * 0.52, lw * 0.34, Math.PI, 0);
+    ctx.stroke();
+    ctx.strokeStyle = '#b8c2d4';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy - lh * 0.52, lw * 0.34, Math.PI, 0);
+    ctx.stroke();
+
+    // Badan gembok
     ctx.fillStyle = '#ffd24a';
-    roundRect(x, y + h * 0.38, w, h * 0.62, 6);
+    roundRect(cx - lw / 2, cy - lh * 0.12, lw, lh, 9);
     ctx.fill();
     ctx.strokeStyle = '#c47f12';
     ctx.lineWidth = 3;
-    roundRect(x, y + h * 0.38, w, h * 0.62, 6);
+    roundRect(cx - lw / 2, cy - lh * 0.12, lw, lh, 9);
     ctx.stroke();
+
+    // Kilau
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    roundRect(cx - lw / 2 + 6, cy - lh * 0.04, lw * 0.22, lh * 0.22, 4);
+    ctx.fill();
 
     // Lubang kunci
     ctx.fillStyle = '#7a4a00';
     ctx.beginPath();
-    ctx.arc(x + w / 2, y + h * 0.66, 5, 0, Math.PI * 2);
+    ctx.arc(cx, cy + lh * 0.30, lw * 0.13, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillRect(x + w / 2 - 2, y + h * 0.66, 4, 9);
-
-    // Gagang (shackle)
-    ctx.strokeStyle = '#9aa5bd';
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.arc(x + w / 2, y + h * 0.36, w * 0.28, Math.PI, 0);
-    ctx.stroke();
+    ctx.fillRect(cx - lw * 0.05, cy + lh * 0.30, lw * 0.10, lh * 0.30);
   }
 
   function drawTrophy(t) {
@@ -801,9 +991,10 @@
     // Mainkan otomatis: sentuh semua gembok, jawab soal, sampai piala.
     // Bot ini HARUS melompati musuh — tanpa melompat, pemain mati 3x dan
     // autoplay berhenti di gembok ke-2. Itu bukan bug game, itu bug bot.
-    autoplay: function (correctRatio) {
+    // levelId opsional: default 1 supaya pemanggilan lama tetap jalan.
+    autoplay: function (correctRatio, levelId) {
       var ratio = correctRatio === undefined ? 1 : correctRatio;
-      startLevel(1);
+      startLevel(levelId || 1);
       var guard = 0;
       var p = S.world.player;
 
